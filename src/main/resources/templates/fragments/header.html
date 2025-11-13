@@ -1,0 +1,71 @@
+
+<header th:fragment="header">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Story Game</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/story-editor">Create Story</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/scene-editor">Scene Editor</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/profile">Profile</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/my-stories">My Stories</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/my-scenes">My Scenes</a></li>
+                </ul>
+
+                <!-- Right-aligned nav: username + logout (always shown; no sec:authorize check) -->
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item navbar-text me-3">Welcome, <strong id="header-username">Guest</strong></li>
+                    <li class="nav-item">
+                        <form th:action="@{/logout}" method="post" class="d-inline" id="logout-form">
+                            <button class="btn btn-outline-danger" type="submit">Logout</button>
+                        </form>
+                    </li>
+                </ul>
+
+                <!-- JS fallback/logout helper so the front-end can trigger logout via fetch if needed -->
+                <script>
+                    (function() {
+                        document.addEventListener('DOMContentLoaded', function() {
+                            // logout handler (fetch with fallback)
+                            var form = document.getElementById('logout-form');
+                            if (form) {
+                                form.addEventListener('submit', function(e) {
+                                    if (!window.fetch) return; // allow normal submit if fetch not available
+                                    e.preventDefault();
+                                    fetch(form.getAttribute('action') || '/logout', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                        body: ''
+                                    }).then(function() {
+                                        window.location.href = '/login';
+                                    }).catch(function() {
+                                        form.submit();
+                                    });
+                                });
+                            }
+
+                            // header username: fetch profile like profile page does
+                            var usernameEl = document.getElementById('header-username');
+                            if (usernameEl && window.fetch) {
+                                fetch('/api/accounts/profile')
+                                    .then(function(res) { return res.json(); })
+                                    .then(function(result) {
+                                        if (result && result.code === '200' && result.data && result.data.username) {
+                                            usernameEl.textContent = result.data.username;
+                                        } else {
+                                            // leave as Guest or clear if you prefer
+                                            usernameEl.textContent = 'Guest';
+                                        }
+                                    })
+                                    .catch(function() {
+                                        // silent fail
+                                    });
+                            }
+                        });
+                    })();
+                </script>
+            </div>
+        </div>
+    </nav>
+</header>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <title>My Stories</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div th:replace="~{fragments/header :: header}"></div>
+
+    <div class="container">
+        <h1>My Stories</h1>
+        <div id="stories-container">
+            <!-- Stories will be loaded here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/stories/my-stories')
+                .then(response => response.json())
+                .then(result => {
+                    const storiesContainer = document.getElementById('stories-container');
+                    if (!result) {
+                        storiesContainer.innerHTML = '<p class="text-danger">Failed to fetch stories.</p>';
+                        return;
+                    }
+
+                    if (result.code === '200') {
+                        const stories = result.data || [];
+                        if (stories.length === 0) {
+                            storiesContainer.innerHTML = '<p>You have not created any stories yet.</p>';
+                            return;
+                        }
+                        let storiesHtml = '<ul class="list-group">';
+                        stories.forEach(story => {
+                            const coverHtml = story.cover ? `<img src="${story.cover}" style="max-width:80px;max-height:60px;margin-right:12px;"/>` : '';
+                            storiesHtml += `
+                                <li id="story-item-${story.id}" class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center">
+                                        ${coverHtml}
+                                        <a href="/story-editor?storyId=${story.id}">${story.name}</a>
+                                    </div>
+                                    <div>
+                                        <a class="btn btn-sm btn-outline-primary me-2" href="/story-editor?storyId=${story.id}">Edit</a>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteStory(${story.id})">Delete</button>
+                                    </div>
+                                </li>
+                            `;
+                        });
+                        storiesHtml += '</ul>';
+                        storiesContainer.innerHTML = storiesHtml;
+
+                        // delete helper for stories
+                        window.deleteStory = function(storyId) {
+                            if (!confirm('确定要删除该故事吗？')) return;
+                            fetch(`/api/stories/${storyId}`, { method: 'DELETE' })
+                                .then(res => res.json())
+                                .then(result => {
+                                    if (result && result.code === '200') {
+                                        const el = document.getElementById('story-item-' + storyId);
+                                        if (el) el.remove();
+                                    } else {
+                                        alert('删除失败：' + (result ? result.msg : '未知错误'));
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error('删除故事出错', err);
+                                    alert('删除故事时发生错误');
+                                });
+                        };
+                    } else {
+                        const msg = result.msg || 'Unknown error';
+                        storiesContainer.innerHTML = `<p class="text-danger">Error fetching stories: ${msg}</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching stories:', error);
+                    const storiesContainer = document.getElementById('stories-container');
+                    storiesContainer.innerHTML = '<p class="text-danger">An unexpected error occurred while fetching your stories.</p>';
+                });
+        });
+    </script>
+</body>
+</html>
