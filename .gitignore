@@ -1,0 +1,14 @@
+# Build output
+/target/
+
+# Java artifacts
+*.jar
+*.war
+*.ear
+
+# IDE files
+/.idea/
+*.iml
+
+# OS files
+.DS_Store
