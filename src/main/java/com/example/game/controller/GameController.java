@@ -2,6 +2,7 @@ package com.example.game.controller;
 
 import com.example.game.dto.ApiResponse;
 import com.example.game.dto.PlayRequest;
+import com.example.game.dto.PlayResult;
 import com.example.game.entity.Option;
 import com.example.game.entity.User;
 import com.example.game.service.GameService;
@@ -28,7 +29,7 @@ public class GameController {
     private OptionService optionService;
 
     @PostMapping("/play")
-    public ResponseEntity<ApiResponse<Long>> play(@RequestBody PlayRequest playRequest, jakarta.servlet.http.HttpSession session) {
+    public ResponseEntity<ApiResponse<PlayResult>> play(@RequestBody PlayRequest playRequest, jakarta.servlet.http.HttpSession session) {
         // Try userId from request first; fall back to session user
         User user = null;
         if (playRequest.getUserId() != null) {
@@ -47,13 +48,11 @@ public class GameController {
             return ResponseEntity.badRequest().body(ApiResponse.error("400", "选项不存在"));
         }
 
-        Long nextSceneId = gameService.getNextSceneId(user, option);
-        if( nextSceneId == option.getSuccess()){
-            return ResponseEntity.ok(ApiResponse.success(nextSceneId, "检定成功"));
-        }else if(nextSceneId == option.getFail()){
-            return ResponseEntity.ok(ApiResponse.success(nextSceneId, "检定失败"));
-
+        PlayResult result = gameService.getNextSceneResult(user, option);
+        if (result.isSuccess()) {
+            return ResponseEntity.ok(ApiResponse.success(result, "检定成功"));
+        } else {
+            return ResponseEntity.ok(ApiResponse.success(result, "检定失败"));
         }
-        return ResponseEntity.ok(ApiResponse.success(nextSceneId, "检定成功"));
     }
 }

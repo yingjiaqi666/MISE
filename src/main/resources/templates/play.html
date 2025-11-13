@@ -151,17 +151,26 @@
             const result = await response.json();
 
             playResultDiv.style.display = 'block';
-            playResultDiv.textContent = result ? (result.msg || JSON.stringify(result)) : 'Unknown response';
 
-            if (result && result.code === '200') {
-                playResultDiv.className = 'alert alert-success';
-                // On success, load the next scene (result.data is nextSceneId)
+            if (result && result.code === '200' && result.data) {
+                // result.data is PlayResult: { nextSceneId, roll, modifier, total, success }
+                const pr = result.data;
+                const details = `（d20: ${pr.roll}，加值: ${pr.modifier}，总值: ${pr.total}）`;
+                playResultDiv.textContent = (result.msg || '检定') + ' ' + details;
+
+                // 无论成功或失败，都跳转到服务器返回的下一个场景（success 表示进入 success 场景，false 表示进入 fail 场景）
+                if (pr.success) {
+                    playResultDiv.className = 'alert alert-success';
+                } else {
+                    playResultDiv.className = 'alert alert-danger';
+                }
                 setTimeout(() => {
-                    loadScene(result.data);
+                    if (pr.nextSceneId) loadScene(pr.nextSceneId);
                 }, 1500);
             } else {
-                playResultDiv.className = 'alert alert-danger';
-                // On failure, the player stays in the same scene.
+                // Fallback: show message or raw response
+                playResultDiv.className = 'alert alert-warning';
+                playResultDiv.textContent = result ? (result.msg || JSON.stringify(result)) : 'Unknown response';
             }
         } catch (error) {
             playResultDiv.className = 'alert alert-danger';
