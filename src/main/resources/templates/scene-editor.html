@@ -6,265 +6,295 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
-    <div th:replace="~{fragments/header :: header}"></div>
+<body class="starry-background">
+<div th:replace="~{fragments/header :: header}"></div>
 
-    <div class="container">
-        <h1 id="editor-title">Create Scene</h1>
-        <form id="scene-form">
-            <input type="hidden" id="sceneId">
-            <div class="mb-3">
-                <label for="name" class="form-label">Scene Name</label>
-                <input type="text" class="form-control" id="name" required>
-            </div>
-            <div class="mb-3">
-                <label for="text" class="form-label">Scene Text</label>
-                <textarea class="form-control" id="text" rows="5"></textarea>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Scene Picture</label>
-                <input type="hidden" id="picture">
-                <input type="file" id="pictureFile" accept="image/*" class="form-control mb-2">
-                <img id="picturePreview" src="" alt="preview" style="max-width: 240px; display: none;"/>
-                <div class="form-text">选择图片后会自动上传，并把图片地址保存到该场景</div>
-            </div>
-            
-            <hr>
-            <h5>Options</h5>
-            <div id="options-section" class="mb-3">
-                <div id="options-container"></div>
-                <button type="button" id="add-option-btn" class="btn btn-sm btn-secondary mt-2">Add Option</button>
-            </div>
-            <button type="submit" class="btn btn-primary">Save Scene</button>
-        </form>
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h1 id="editor-title" class="mb-0">Create Scene</h1>
+        </div>
+        <div class="card-body">
+            <form id="scene-form">
+                <input type="hidden" id="sceneId">
+
+                <div class="mb-4">
+                    <h5 class="text-purple mb-3">Scene Information</h5>
+                    <div class="mb-3">
+                        <label for="name" class="form-label fw-bold">Scene Name</label>
+                        <input type="text" class="form-control" id="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="text" class="form-label fw-bold">Scene Text</label>
+                        <textarea class="form-control" id="text" rows="5" placeholder="Enter the scene description..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Scene Picture</label>
+                        <input type="hidden" id="picture">
+                        <div class="input-group mb-2">
+                            <input type="file" id="pictureFile" accept="image/*" class="form-control">
+                        </div>
+                        <div id="picture-preview-container" class="text-center" style="display: none;">
+                            <img id="picturePreview" src="" alt="preview" class="story-cover-border" style="max-width: 240px; max-height: 160px;"/>
+                        </div>
+                        <div class="form-text text-muted">选择图片后会自动上传，并把图片地址保存到该场景</div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <div class="mb-4">
+                    <h5 class="text-purple mb-3">Options</h5>
+                    <div id="options-section" class="mb-3">
+                        <div id="options-container"></div>
+                        <button type="button" id="add-option-btn" class="btn btn-outline-primary mt-2">
+                            <i class="bi bi-plus-circle"></i> Add Option
+                        </button>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-secondary" onclick="window.location.href='/my-scenes'">
+                        Back to My Scenes
+                    </button>
+                    <button type="submit" class="btn btn-primary px-4">Save Scene</button>
+                </div>
+            </form>
+        </div>
     </div>
+</div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const sceneId = urlParams.get('sceneId');
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sceneId = urlParams.get('sceneId');
 
-            // First load the current user's scenes so we can populate success/fail selects
-            loadUserScenes().then(() => {
-                if (sceneId) {
-                    document.getElementById('editor-title').textContent = 'Edit Scene';
-                    document.getElementById('sceneId').value = sceneId;
-                    fetch(`/api/scenes/${sceneId}`)
-                        .then(response => response.json())
-                        .then(result => {
-                            if (result && result.code === '200') {
-                                const scene = result.data;
-                                document.getElementById('name').value = scene.name;
-                                document.getElementById('text').value = scene.text;
-                                document.getElementById('picture').value = scene.picture || '';
-                                if (scene.picture) {
-                                    const pv = document.getElementById('picturePreview');
-                                    pv.src = scene.picture;
-                                    pv.style.display = 'block';
-                                }
-                                // load existing options
-                                loadOptionsForScene(sceneId);
-                            } else {
-                                alert('Error fetching scene: ' + (result ? result.msg : 'Unknown'));
+        // First load the current user's scenes so we can populate success/fail selects
+        loadUserScenes().then(() => {
+            if (sceneId) {
+                document.getElementById('editor-title').textContent = 'Edit Scene';
+                document.getElementById('sceneId').value = sceneId;
+                fetch(`/api/scenes/${sceneId}`)
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result && result.code === '200') {
+                            const scene = result.data;
+                            document.getElementById('name').value = scene.name;
+                            document.getElementById('text').value = scene.text;
+                            document.getElementById('picture').value = scene.picture || '';
+                            if (scene.picture) {
+                                const pv = document.getElementById('picturePreview');
+                                pv.src = scene.picture;
+                                document.getElementById('picture-preview-container').style.display = 'block';
                             }
-                        });
-                }
-            }).catch(err => {
-                console.error('Failed to load user scenes', err);
-                // still try to load scene options even if user scenes failed
-                if (sceneId) loadOptionsForScene(sceneId);
-            });
-        });
-
-        document.getElementById('add-option-btn').addEventListener('click', function() {
-            addOptionInput(null);
-        });
-
-        // auto upload when selecting file
-        document.getElementById('pictureFile').addEventListener('change', async function() {
-            const input = this;
-            if (!input.files || !input.files[0]) return;
-            try {
-                const url = await uploadImage(input.files[0]);
-                document.getElementById('picture').value = url;
-                const pv = document.getElementById('picturePreview');
-                pv.src = url;
-                pv.style.display = 'block';
-            } catch (e) {
-                // show detailed error to help debugging
-                alert('图片上传失败: ' + (e && e.message ? e.message : e));
-            } finally {
-                input.value = '';
+                            // load existing options
+                            loadOptionsForScene(sceneId);
+                        } else {
+                            alert('Error fetching scene: ' + (result ? result.msg : 'Unknown'));
+                        }
+                    });
             }
+        }).catch(err => {
+            console.error('Failed to load user scenes', err);
+            // still try to load scene options even if user scenes failed
+            if (sceneId) loadOptionsForScene(sceneId);
         });
+    });
 
-        function addOptionInput(option) {
-            const container = document.getElementById('options-container');
-            const div = document.createElement('div');
-            div.className = 'p-2 border rounded mb-2 option-group';
-            div.dataset.optionId = option && option.id ? option.id : '';
-            div.innerHTML = `
+    document.getElementById('add-option-btn').addEventListener('click', function() {
+        addOptionInput(null);
+    });
+
+    // auto upload when selecting file
+    document.getElementById('pictureFile').addEventListener('change', async function() {
+        const input = this;
+        if (!input.files || !input.files[0]) return;
+        try {
+            const url = await uploadImage(input.files[0]);
+            document.getElementById('picture').value = url;
+            const pv = document.getElementById('picturePreview');
+            pv.src = url;
+            document.getElementById('picture-preview-container').style.display = 'block';
+        } catch (e) {
+            // show detailed error to help debugging
+            alert('图片上传失败: ' + (e && e.message ? e.message : e));
+        } finally {
+            input.value = '';
+        }
+    });
+
+    function addOptionInput(option) {
+        const container = document.getElementById('options-container');
+        const div = document.createElement('div');
+        div.className = 'card p-3 mb-3 option-group';
+        div.dataset.optionId = option && option.id ? option.id : '';
+        div.innerHTML = `
                 <div class="mb-2">
-                    <label class="form-label">Option Text</label>
-                    <input type="text" class="form-control option-text" value="${option ? (option.text || '') : ''}" required>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label">Success Scene</label>
-                    <select class="form-select option-success">
-                        <option value="">-- None --</option>
-                    </select>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label">Fail Scene</label>
-                    <select class="form-select option-fail">
-                        <option value="">-- None --</option>
-                    </select>
+                    <label class="form-label fw-bold">Option Text</label>
+                    <input type="text" class="form-control option-text" value="${option ? (option.text || '') : ''}" placeholder="Enter option text..." required>
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-2">
-                            <label class="form-label">Attribute Check (type)</label>
-                            <select class="form-select option-type">
-                                <option value="">None</option>
-                                <option value="power" ${option && option.type === 'power' ? 'selected' : ''}>Power</option>
-                                <option value="agile" ${option && option.type === 'agile' ? 'selected' : ''}>Agile</option>
-                                <option value="perception" ${option && option.type === 'perception' ? 'selected' : ''}>Perception</option>
-                                <option value="intelligence" ${option && option.type === 'intelligence' ? 'selected' : ''}>Intelligence</option>
-                                <option value="charm" ${option && option.type === 'charm' ? 'selected' : ''}>Charm</option>
-                            </select>
-                        </div>
+                        <label class="form-label">Success Scene</label>
+                        <select class="form-select option-success">
+                            <option value="">-- None --</option>
+                        </select>
+                    </div>
                     <div class="col-md-6 mb-2">
-                        <label class="form-label">Difficulty (dc)</label>
-                        <input type="number" class="form-control option-dc" value="${option ? (option.dc || 0) : 0}">
+                        <label class="form-label">Fail Scene</label>
+                        <select class="form-select option-fail">
+                            <option value="">-- None --</option>
+                        </select>
                     </div>
                 </div>
-                <button type="button" class="btn btn-sm btn-danger mt-2" onclick="removeOption(this)">Remove</button>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Attribute Check (type)</label>
+                        <select class="form-select option-type">
+                            <option value="">None</option>
+                            <option value="power" ${option && option.type === 'power' ? 'selected' : ''}>Power</option>
+                            <option value="agile" ${option && option.type === 'agile' ? 'selected' : ''}>Agile</option>
+                            <option value="perception" ${option && option.type === 'perception' ? 'selected' : ''}>Perception</option>
+                            <option value="intelligence" ${option && option.type === 'intelligence' ? 'selected' : ''}>Intelligence</option>
+                            <option value="charm" ${option && option.type === 'charm' ? 'selected' : ''}>Charm</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Difficulty (dc)</label>
+                        <input type="number" class="form-control option-dc" value="${option ? (option.dc || 0) : 0}" min="0" max="30">
+                    </div>
+                </div>
+                <div class="text-end">
+                    <button type="button" class="btn btn-sm btn-danger mt-2" onclick="removeOption(this)">
+                        Remove Option
+                    </button>
+                </div>
             `;
-            container.appendChild(div);
-            // populate success/fail selects from loaded user scenes
-            populateSceneSelects(div, option);
+        container.appendChild(div);
+        // populate success/fail selects from loaded user scenes
+        populateSceneSelects(div, option);
+    }
+
+    // Track deleted option ids so we can persist deletions on save
+    window._deletedOptionIds = window._deletedOptionIds || [];
+
+    function removeOption(btn) {
+        const group = btn.closest('.option-group');
+        const optionId = group.dataset.optionId;
+        if (optionId) {
+            // mark for deletion
+            window._deletedOptionIds.push(optionId);
         }
+        group.remove();
+    }
 
-        // Track deleted option ids so we can persist deletions on save
-        window._deletedOptionIds = window._deletedOptionIds || [];
+    function populateSceneSelects(optionDiv, option) {
+        try {
+            const successSelect = optionDiv.querySelector('.option-success');
+            const failSelect = optionDiv.querySelector('.option-fail');
+            // clear any existing options except the first placeholder
+            successSelect.innerHTML = '<option value="">-- None --</option>';
+            failSelect.innerHTML = '<option value="">-- None --</option>';
 
-        function removeOption(btn) {
-            const group = btn.closest('.option-group');
-            const optionId = group.dataset.optionId;
-            if (optionId) {
-                // mark for deletion
-                window._deletedOptionIds.push(optionId);
+            const scenes = window.userScenes || [];
+            scenes.forEach(s => {
+                const opt1 = document.createElement('option');
+                opt1.value = s.id;
+                opt1.textContent = s.name + (s.id ? ` (id:${s.id})` : '');
+                successSelect.appendChild(opt1);
+
+                const opt2 = document.createElement('option');
+                opt2.value = s.id;
+                opt2.textContent = s.name + (s.id ? ` (id:${s.id})` : '');
+                failSelect.appendChild(opt2);
+            });
+
+            // preselect if editing
+            if (option) {
+                if (option.success) successSelect.value = option.success;
+                if (option.fail) failSelect.value = option.fail;
             }
-            group.remove();
+        } catch (e) {
+            console.error('populateSceneSelects error', e);
         }
+    }
 
-
-        function populateSceneSelects(optionDiv, option) {
-            try {
-                const successSelect = optionDiv.querySelector('.option-success');
-                const failSelect = optionDiv.querySelector('.option-fail');
-                // clear any existing options except the first placeholder
-                successSelect.innerHTML = '<option value="">-- None --</option>';
-                failSelect.innerHTML = '<option value="">-- None --</option>';
-
-                const scenes = window.userScenes || [];
-                scenes.forEach(s => {
-                    const opt1 = document.createElement('option');
-                    opt1.value = s.id;
-                    opt1.textContent = s.name + (s.id ? ` (id:${s.id})` : '');
-                    successSelect.appendChild(opt1);
-
-                    const opt2 = document.createElement('option');
-                    opt2.value = s.id;
-                    opt2.textContent = s.name + (s.id ? ` (id:${s.id})` : '');
-                    failSelect.appendChild(opt2);
-                });
-
-                // preselect if editing
-                if (option) {
-                    if (option.success) successSelect.value = option.success;
-                    if (option.fail) failSelect.value = option.fail;
+    // load current user's scenes for populating selects
+    function loadUserScenes() {
+        return fetch('/api/scenes/my-scenes')
+            .then(res => res.json())
+            .then(result => {
+                if (result && result.code === '200') {
+                    window.userScenes = result.data || [];
+                    return window.userScenes;
+                } else {
+                    window.userScenes = [];
+                    return window.userScenes;
                 }
-            } catch (e) {
-                console.error('populateSceneSelects error', e);
-            }
-        }
-
-        // load current user's scenes for populating selects
-        function loadUserScenes() {
-            return fetch('/api/scenes/my-scenes')
-                .then(res => res.json())
-                .then(result => {
-                    if (result && result.code === '200') {
-                        window.userScenes = result.data || [];
-                        return window.userScenes;
-                    } else {
-                        window.userScenes = [];
-                        return window.userScenes;
-                    }
-                });
-        }
-        function loadOptionsForScene(sceneId) {
-            fetch(`/api/scenes/${sceneId}/options`)
-                .then(res => res.json())
-                .then(result => {
-                    if (result && result.code === '200') {
-                        const data = result.data || [];
-                        document.getElementById('options-container').innerHTML = '';
-                        data.forEach(opt => addOptionInput(opt));
-                    }
-                })
-                .catch(err => console.error('Failed to load options', err));
-        }
-
-        async function uploadImage(file) {
-            const fd = new FormData();
-            fd.append('file', file);
-            let res;
-            try {
-                res = await fetch('/api/upload', { method: 'POST', body: fd });
-            } catch (err) {
-                throw new Error('网络错误: ' + (err && err.message ? err.message : err));
-            }
-            // Try to parse JSON; if not JSON, include raw text for debugging
-            let parsed = null;
-            try {
-                parsed = await res.clone().json();
-            } catch (e) {
-                // not JSON
-                const txt = await res.clone().text();
-                throw new Error(`非JSON响应 (HTTP ${res.status}): ${txt.slice(0,200)}`);
-            }
-            if (!res.ok) {
-                const msg = (parsed && parsed.msg) ? parsed.msg : `HTTP ${res.status} ${res.statusText}`;
-                throw new Error(msg);
-            }
-            if (parsed && parsed.code === '200') {
-                const data = parsed.data;
-                return (data && (data.url || data)) || '';
-            }
-            throw new Error(parsed ? (parsed.msg || '上传返回失败') : 'upload failed');
-        }
-
-        document.getElementById('scene-form').addEventListener('submit', function(event) {
-            event.preventDefault();
-
-            const sceneId = document.getElementById('sceneId').value;
-            const sceneData = {
-                name: document.getElementById('name').value,
-                text: document.getElementById('text').value,
-                picture: document.getElementById('picture').value
-            };
-
-            const url = sceneId ? `/api/scenes/${sceneId}` : '/api/scenes';
-            const method = sceneId ? 'PUT' : 'POST';
-
-            fetch(url, {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(sceneData)
+            });
+    }
+    function loadOptionsForScene(sceneId) {
+        fetch(`/api/scenes/${sceneId}/options`)
+            .then(res => res.json())
+            .then(result => {
+                if (result && result.code === '200') {
+                    const data = result.data || [];
+                    document.getElementById('options-container').innerHTML = '';
+                    data.forEach(opt => addOptionInput(opt));
+                }
             })
+            .catch(err => console.error('Failed to load options', err));
+    }
+
+    async function uploadImage(file) {
+        const fd = new FormData();
+        fd.append('file', file);
+        let res;
+        try {
+            res = await fetch('/api/upload', { method: 'POST', body: fd });
+        } catch (err) {
+            throw new Error('网络错误: ' + (err && err.message ? err.message : err));
+        }
+        // Try to parse JSON; if not JSON, include raw text for debugging
+        let parsed = null;
+        try {
+            parsed = await res.clone().json();
+        } catch (e) {
+            // not JSON
+            const txt = await res.clone().text();
+            throw new Error(`非JSON响应 (HTTP ${res.status}): ${txt.slice(0,200)}`);
+        }
+        if (!res.ok) {
+            const msg = (parsed && parsed.msg) ? parsed.msg : `HTTP ${res.status} ${res.statusText}`;
+            throw new Error(msg);
+        }
+        if (parsed && parsed.code === '200') {
+            const data = parsed.data;
+            return (data && (data.url || data)) || '';
+        }
+        throw new Error(parsed ? (parsed.msg || '上传返回失败') : 'upload failed');
+    }
+
+    document.getElementById('scene-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const sceneId = document.getElementById('sceneId').value;
+        const sceneData = {
+            name: document.getElementById('name').value,
+            text: document.getElementById('text').value,
+            picture: document.getElementById('picture').value
+        };
+
+        const url = sceneId ? `/api/scenes/${sceneId}` : '/api/scenes';
+        const method = sceneId ? 'PUT' : 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(sceneData)
+        })
             .then(response => response.json())
             .then(result => {
                 if (result && result.code === '200') {
@@ -289,63 +319,73 @@
                 console.error('Error saving scene:', error);
                 alert('An error occurred while saving the scene.');
             });
+    });
+
+    async function saveOptions(sceneId) {
+        const groups = document.querySelectorAll('.option-group');
+        const promises = [];
+        groups.forEach(group => {
+            const text = group.querySelector('.option-text').value;
+            const success = parseInt(group.querySelector('.option-success').value) || null;
+            const fail = parseInt(group.querySelector('.option-fail').value) || null;
+            const type = group.querySelector('.option-type').value || '';
+            const dc = parseInt(group.querySelector('.option-dc').value) || 0;
+
+            // Build option payload including sceneId
+            const payload = {
+                text: text,
+                success: success,
+                fail: fail,
+                type: type,
+                dc: dc,
+                sceneId: sceneId
+            };
+
+            // If option has existing id, call update; else create
+            const optionId = group.dataset.optionId;
+            if (optionId) {
+                const p = fetch('/api/options/', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Object.assign(payload, { id: optionId }))
+                });
+                promises.push(p);
+            } else {
+                const p = fetch('/api/options/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                promises.push(p);
+            }
         });
 
-        async function saveOptions(sceneId) {
-            const groups = document.querySelectorAll('.option-group');
-            const promises = [];
-            groups.forEach(group => {
-                const text = group.querySelector('.option-text').value;
-                const success = parseInt(group.querySelector('.option-success').value) || null;
-                const fail = parseInt(group.querySelector('.option-fail').value) || null;
-                const type = group.querySelector('.option-type').value || '';
-                const dc = parseInt(group.querySelector('.option-dc').value) || 0;
+        await Promise.all(promises);
+        // process deletions recorded during the edit session
+        const deletes = (window._deletedOptionIds || []).map(id => {
+            return fetch(`/api/options/${id}`, { method: 'DELETE' })
+                .then(res => res.json())
+                .then(r => {
+                    if (!r || r.code !== '200') {
+                        console.warn('Failed to delete option id', id, r);
+                    }
+                })
+                .catch(err => console.error('Error deleting option id', id, err));
+        });
+        await Promise.all(deletes);
+        // clear the deleted list after processing
+        window._deletedOptionIds = [];
+    }
+</script>
 
-                // Build option payload including sceneId
-                const payload = {
-                    text: text,
-                    success: success,
-                    fail: fail,
-                    type: type,
-                    dc: dc,
-                    sceneId: sceneId
-                };
-
-                // If option has existing id, call update; else create
-                const optionId = group.dataset.optionId;
-                if (optionId) {
-                    const p = fetch('/api/options/', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(Object.assign(payload, { id: optionId }))
-                    });
-                    promises.push(p);
-                } else {
-                    const p = fetch('/api/options/create', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    promises.push(p);
-                }
-            });
-
-            await Promise.all(promises);
-            // process deletions recorded during the edit session
-            const deletes = (window._deletedOptionIds || []).map(id => {
-                return fetch(`/api/options/${id}`, { method: 'DELETE' })
-                    .then(res => res.json())
-                    .then(r => {
-                        if (!r || r.code !== '200') {
-                            console.warn('Failed to delete option id', id, r);
-                        }
-                    })
-                    .catch(err => console.error('Error deleting option id', id, err));
-            });
-            await Promise.all(deletes);
-            // clear the deleted list after processing
-            window._deletedOptionIds = [];
-        }
-    </script>
+<style>
+    .text-purple {
+        color: #9370DB !important;
+    }
+    .option-group {
+        background: rgba(147, 112, 219, 0.05);
+        border: 1px solid rgba(147, 112, 219, 0.2);
+    }
+</style>
 </body>
 </html>

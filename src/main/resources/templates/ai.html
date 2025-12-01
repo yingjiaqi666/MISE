@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+</head>
+<body class="starry-background">
+<div th:replace="~{fragments/header :: header}"></div>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10 col-xl-8">
+            <div class="card chat-card">
+                <div class="card-header chat-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <div class="ai-avatar me-3">
+                                <i class="bi bi-robot"></i>
+                            </div>
+                            <div>
+                                <h4 class="mb-0">AI Story Assistant</h4>
+                                <small class="text-muted" id="connection-status">Ready to help with your stories</small>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-purple" onclick="clearChat()" title="Clear Chat">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-purple" onclick="newChat()" title="New Chat">
+                                <i class="bi bi-plus-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body chat-body">
+                    <!-- 聊天消息区域 -->
+                    <div id="chat-messages" class="chat-messages-container">
+                        <!-- 欢迎消息 -->
+                        <div class="chat-welcome text-center py-5">
+                            <div class="ai-avatar-large mb-3">
+                                <i class="bi bi-robot"></i>
+                            </div>
+                            <h3 class="text-purple">Hello! I'm your AI Story Assistant</h3>
+                            <p class="text-muted mb-4">I can help you with story creation, scene design, character development, and more!</p>
+
+                            <!-- 快速开始按钮 -->
+                            <div class="row g-2 mb-4">
+                                <div class="col-md-6">
+                                    <button class="btn btn-outline-purple w-100" onclick="sendSuggestion('Help me brainstorm a fantasy story idea')">
+                                        <i class="bi bi-lightbulb"></i> Brainstorm Ideas
+                                    </button>
+                                </div>
+                                <div class="col-md-6">
+                                    <button class="btn btn-outline-purple w-100" onclick="sendSuggestion('Create a character profile for a protagonist')">
+                                        <i class="bi bi-person"></i> Create Character
+                                    </button>
+                                </div>
+                                <div class="col-md-6">
+                                    <button class="btn btn-outline-purple w-100" onclick="sendSuggestion('Write a scene description for a mysterious forest')">
+                                        <i class="bi bi-image"></i> Design Scene
+                                    </button>
+                                </div>
+                                <div class="col-md-6">
+                                    <button class="btn btn-outline-purple w-100" onclick="sendSuggestion('Help me improve this story structure')">
+                                        <i class="bi bi-pencil"></i> Improve Writing
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 聊天消息将动态添加到这里 -->
+                    </div>
+
+                    <!-- 输入区域 -->
+                    <div class="chat-input-area mt-3">
+                        <div class="input-group">
+                                <textarea
+                                        id="message-input"
+                                        class="form-control chat-input"
+                                        placeholder="Ask me anything about your stories..."
+                                        rows="2"
+                                        onkeydown="handleKeyDown(event)"
+                                ></textarea>
+                            <button
+                                    id="send-button"
+                                    class="btn btn-primary chat-send-btn"
+                                    onclick="sendMessage()"
+                                    disabled
+                            >
+                                <i class="bi bi-send"></i>
+                            </button>
+                        </div>
+
+                        <!-- 输入提示 -->
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 聊天历史侧边栏（可选） -->
+            <div class="mt-3 text-center">
+                <small class="text-muted">
+                    Conversations are saved locally in your browser
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 状态管理
+    let chatHistory = [];
+    let currentChatId = 'default-chat-' + Date.now();
+    let isProcessing = false;
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadChatHistory();
+        setupEventListeners();
+        updateSendButton();
+    });
+
+    function setupEventListeners() {
+        // 输入框内容变化时更新发送按钮状态
+        const input = document.getElementById('message-input');
+        input.addEventListener('input', updateSendButton);
+
+        // 输入框聚焦时滚动到底部
+        input.addEventListener('focus', scrollToBottom);
+    }
+
+    function updateSendButton() {
+        const input = document.getElementById('message-input');
+        const button = document.getElementById('send-button');
+        const hasText = input.value.trim().length > 0;
+
+        button.disabled = !hasText || isProcessing;
+        button.innerHTML = isProcessing
+            ? '<span class="spinner-border spinner-border-sm"></span>'
+            : '<i class="bi bi-send"></i>';
+    }
+
+    function handleKeyDown(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            if (!isProcessing) {
+                sendMessage();
+            }
+        }
+    }
+
+    // ================ AI API 接口 ================
+    // 这些函数留给AI功能开发者实现
+
+    /**
+     * 发送消息给AI助手
+     * @param {string} message - 用户消息
+     * @returns {Promise} - AI回复的Promise
+     */
+    async function sendToAI(message) {
+        // TODO: AI开发者需要实现这个函数来调用AI API
+        console.log('Sending to AI:', message);
+
+        // 模拟AI响应 - AI开发者需要替换为实际的API调用
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                // 模拟不同的响应类型
+                const responses = {
+                    'brainstorm': "I love fantasy stories! Here are some ideas:\n\n1. A world where dreams become reality\n2. A character who can communicate with mythical creatures\n3. A quest to restore magic to a fading world\n\nWhich direction interests you most?",
+                    'character': "Great! Let's create a memorable protagonist:\n\n**Name:** Elara\n**Age:** 22\n**Background:** Village healer with hidden magical abilities\n**Personality:** Compassionate, curious, but cautious\n**Goal:** To uncover her true heritage and master her powers\n**Flaw:** Overly protective of her community\n\nWant to develop this character further?",
+                    'scene': "Here's a scene description for a mysterious forest:\n\nThe ancient Whispering Woods stood silent under a moonless sky. Bioluminescent mushrooms cast an eerie blue glow on gnarled roots that snaked across the forest floor. A chill wind carried the scent of damp earth and decaying leaves. In the distance, a faint shimmer caught the eye—perhaps a trick of the light, or something watching from the shadows.",
+                    'writing': "To improve your story structure, consider:\n\n1. **Strong Opening:** Hook readers with immediate intrigue\n2. **Character Arcs:** Ensure each main character grows meaningfully\n3. **Pacing:** Balance action scenes with character development\n4. **Foreshadowing:** Plant subtle clues for later reveals\n5. **Satisfying Resolution:** Tie up major plot threads\n\nWould you like me to review a specific part of your story?"
+                };
+
+                // 根据关键词选择合适的响应
+                let response = "I understand you're asking: \"" + message + "\". I'm here to help!";
+
+                const lowerMsg = message.toLowerCase();
+                if (lowerMsg.includes('fantasy') || lowerMsg.includes('idea')) {
+                    response = responses.brainstorm;
+                } else if (lowerMsg.includes('character')) {
+                    response = responses.character;
+                } else if (lowerMsg.includes('scene') || lowerMsg.includes('forest')) {
+                    response = responses.scene;
+                } else if (lowerMsg.includes('structure') || lowerMsg.includes('improve')) {
+                    response = responses.writing;
+                }
+
+                resolve(response);
+            }, 1500); // 模拟网络延迟
+        });
+    }
+
+    // ================ 聊天功能 ================
+
+    async function sendMessage() {
+        const input = document.getElementById('message-input');
+        const message = input.value.trim();
+
+        if (!message || isProcessing) return;
+
+        // 设置处理状态
+        isProcessing = true;
+        updateSendButton();
+
+        // 添加用户消息
+        addMessageToChat('user', message);
+        input.value = '';
+        updateSendButton();
+
+        // 显示AI思考状态
+        const aiMessageId = 'ai-' + Date.now();
+        addMessageToChat('ai', '', aiMessageId, true);
+
+        try {
+            // 调用AI API
+            const response = await sendToAI(message);
+
+            // 更新AI回复
+            updateAIMessage(aiMessageId, response);
+
+            // 保存到历史记录
+            saveToHistory('user', message);
+            saveToHistory('ai', response);
+
+        } catch (error) {
+            updateAIMessage(aiMessageId, `Sorry, I encountered an error: ${error.message}`);
+            console.error('AI Error:', error);
+        } finally {
+            isProcessing = false;
+            updateSendButton();
+            input.focus(); // 重新聚焦到输入框
+        }
+    }
+
+    function sendSuggestion(suggestion) {
+        const input = document.getElementById('message-input');
+        input.value = suggestion;
+        updateSendButton();
+        sendMessage();
+    }
+
+    function addMessageToChat(role, content, messageId = null, isLoading = false) {
+        const messagesContainer = document.getElementById('chat-messages');
+        const welcomeElement = document.querySelector('.chat-welcome');
+
+        // 隐藏欢迎消息（如果是第一条消息）
+        if (welcomeElement && chatHistory.length === 0 && role === 'user') {
+            welcomeElement.style.display = 'none';
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${role}-message`;
+        if (messageId) messageDiv.id = messageId;
+
+        // 头像
+        const avatar = role === 'user'
+            ? '<div class="message-avatar user-avatar"><i class="bi bi-person"></i></div>'
+            : '<div class="message-avatar ai-avatar-sm"><i class="bi bi-robot"></i></div>';
+
+        // 消息内容
+        let messageContent = '';
+        if (isLoading) {
+            messageContent = `
+                    <div class="message-content">
+                        <div class="message-text">
+                            <div class="thinking-indicator">
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+        } else {
+            messageContent = `
+                    <div class="message-content">
+                        <div class="message-text">${formatMessage(content)}</div>
+                        <div class="message-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                `;
+        }
+
+        messageDiv.innerHTML = `
+                <div class="message-wrapper">
+                    ${role === 'ai' ? avatar : ''}
+                    ${messageContent}
+                    ${role === 'user' ? avatar : ''}
+                </div>
+            `;
+
+        messagesContainer.appendChild(messageDiv);
+        scrollToBottom();
+    }
+
+    function updateAIMessage(messageId, content) {
+        const messageDiv = document.getElementById(messageId);
+        if (messageDiv) {
+            const contentDiv = messageDiv.querySelector('.message-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = `
+                        <div class="message-text">${formatMessage(content)}</div>
+                        <div class="message-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    `;
+            }
+        }
+    }
+
+    function formatMessage(text) {
+        // 简单的Markdown格式化
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // 粗体
+            .replace(/\n\n/g, '</p><p>') // 段落
+            .replace(/\n/g, '<br>') // 换行
+            .replace(/^\s*<p>/g, '<p>') // 清理
+            .replace(/<\/p>\s*$/g, '</p>');
+    }
+
+    function saveToHistory(role, content) {
+        chatHistory.push({
+            role,
+            content,
+            timestamp: new Date().toISOString()
+        });
+
+        // 保存到localStorage
+        localStorage.setItem(`aiChat_${currentChatId}`, JSON.stringify(chatHistory));
+    }
+
+    function loadChatHistory() {
+        const saved = localStorage.getItem(`aiChat_${currentChatId}`);
+        if (saved) {
+            try {
+                chatHistory = JSON.parse(saved);
+                // 重新显示历史消息
+                if (chatHistory.length > 0) {
+                    document.querySelector('.chat-welcome').style.display = 'none';
+                    chatHistory.forEach(msg => {
+                        addMessageToChat(msg.role, msg.content);
+                    });
+                }
+            } catch (e) {
+                console.error('Error loading chat history:', e);
+            }
+        }
+    }
+
+    function clearChat() {
+        if (confirm('Clear this conversation? This cannot be undone.')) {
+            chatHistory = [];
+            const messagesContainer = document.getElementById('chat-messages');
+            messagesContainer.innerHTML = '';
+
+            // 显示欢迎消息
+            const welcomeElement = document.querySelector('.chat-welcome');
+            if (welcomeElement) {
+                welcomeElement.style.display = 'block';
+            }
+
+            localStorage.removeItem(`aiChat_${currentChatId}`);
+            scrollToBottom();
+        }
+    }
+
+    function newChat() {
+        // 保存当前对话
+        if (chatHistory.length > 0) {
+            const chatName = prompt('Name this conversation (optional):', 'Conversation ' + new Date().toLocaleDateString());
+            if (chatName !== null) {
+                localStorage.setItem(`aiChat_${currentChatId}_name`, chatName);
+            }
+        }
+
+        // 开始新对话
+        currentChatId = 'chat-' + Date.now();
+        chatHistory = [];
+        const messagesContainer = document.getElementById('chat-messages');
+        messagesContainer.innerHTML = '';
+
+        // 显示欢迎消息
+        const welcomeElement = document.querySelector('.chat-welcome');
+        if (welcomeElement) {
+            welcomeElement.style.display = 'block';
+        }
+
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        const messagesContainer = document.getElementById('chat-messages');
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+</script>
+
+<style>
+    /* 聊天界面样式 */
+    .chat-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .chat-header {
+        background: linear-gradient(135deg, #9370DB, #8A2BE2);
+        color: white;
+        border-radius: 12px 12px 0 0;
+        border: none;
+    }
+
+    .chat-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .chat-messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        background: rgba(248, 249, 250, 0.5);
+    }
+
+    .chat-input-area {
+        padding: 20px;
+        border-top: 1px solid rgba(221, 160, 221, 0.2);
+        background: white;
+    }
+
+    .chat-input {
+        border: 2px solid #DDA0DD;
+        border-radius: 8px;
+        resize: none;
+    }
+
+    .chat-input:focus {
+        border-color: #8A2BE2;
+        box-shadow: 0 0 0 0.25rem rgba(138, 43, 226, 0.25);
+    }
+
+    .chat-send-btn {
+        border-radius: 8px;
+        margin-left: 10px;
+        padding: 10px 20px;
+    }
+
+    /* 消息样式 */
+    .chat-message {
+        margin-bottom: 20px;
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-wrapper {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .user-message .message-wrapper {
+        flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 4px;
+    }
+
+    .user-avatar {
+        background: linear-gradient(135deg, #4682B4, #4169E1);
+        color: white;
+    }
+
+    .ai-avatar-sm {
+        background: linear-gradient(135deg, #9370DB, #8A2BE2);
+        color: white;
+    }
+
+    .ai-avatar-large {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        background: linear-gradient(135deg, #9370DB, #8A2BE2);
+        color: white;
+        font-size: 2.5rem;
+    }
+
+    .message-content {
+        max-width: 70%;
+        padding: 12px 16px;
+        border-radius: 18px;
+        position: relative;
+    }
+
+    .user-message .message-content {
+        background: linear-gradient(135deg, #4682B4, #4169E1);
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+
+    .ai-message .message-content {
+        background: rgba(147, 112, 219, 0.1);
+        color: #333;
+        border-bottom-left-radius: 4px;
+    }
+
+    .message-text {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        line-height: 1.5;
+    }
+
+    .message-text p {
+        margin-bottom: 0.5rem;
+    }
+
+    .message-text p:last-child {
+        margin-bottom: 0;
+    }
+
+    .message-time {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        margin-top: 4px;
+        text-align: right;
+    }
+
+    /* 思考指示器 */
+    .thinking-indicator {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        height: 20px;
+    }
+
+    .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #9370DB;
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+    }
+
+    /* 滚动条样式 */
+    .chat-messages-container::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .chat-messages-container::-webkit-scrollbar-track {
+        background: rgba(221, 160, 221, 0.1);
+        border-radius: 3px;
+    }
+
+    .chat-messages-container::-webkit-scrollbar-thumb {
+        background: rgba(147, 112, 219, 0.3);
+        border-radius: 3px;
+    }
+
+    .chat-messages-container::-webkit-scrollbar-thumb:hover {
+        background: rgba(147, 112, 219, 0.5);
+    }
+
+    /* 响应式设计 */
+    @media (max-width: 768px) {
+        .chat-card {
+            height: 85vh;
+        }
+
+        .message-content {
+            max-width: 85%;
+        }
+
+        .ai-avatar-large {
+            width: 60px;
+            height: 60px;
+            font-size: 2rem;
+        }
+    }
+</style>
+</body>
+</html>
