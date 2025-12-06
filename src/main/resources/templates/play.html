@@ -5,10 +5,12 @@
     <title>Play Story</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <!-- 添加Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
 </head>
 <body class="starry-background">
 <div th:replace="~{fragments/header :: header}"></div>
-
+<div th:replace="~{fragments/music-player :: music-player}"></div>
 <div id="game-container" class="container mt-4">
     <div class="card mb-4">
         <div class="card-header">
@@ -26,13 +28,46 @@
         </div>
     </div>
 
+    <!-- 修改1: 将选项卡片改为AI输入卡片 -->
     <div class="card">
         <div class="card-header">
-            <h5 class="mb-0">Choices</h5>
+            <h5 class="mb-0">行动输入</h5>
         </div>
         <div class="card-body">
-            <div id="options-container" class="list-group">
-                <div class="text-center text-muted">Loading options...</div>
+            <div id="ai-input-container">
+                <div class="mb-3">
+                    <label for="player-input" class="form-label">描述您的行动：</label>
+                    <textarea
+                            id="player-input"
+                            class="form-control"
+                            rows="3"
+                            placeholder="在这里说说你想做点什么吧？AI助手会帮你判断你的行为会把你导向什么结果。"
+                    ></textarea>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <button id="submit-action" class="btn btn-primary" onclick="handlePlayerInput()">
+                        <span id="submit-text">执行行动</span>
+                        <span id="thinking-indicator" class="spinner-border spinner-border-sm" style="display: none;"></span>
+                    </button>
+                    <button id="show-options-btn" class="btn btn-outline-secondary btn-sm" onclick="toggleOptionsView()">
+                        显示预设选项
+                    </button>
+                </div>
+                <!-- AI思考指示器 -->
+                <div id="ai-thinking" class="alert alert-info mt-2" style="display: none;">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        <span>AI正在分析您的行动...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 修改2: 备选选项容器（默认隐藏） -->
+            <div id="fallback-options-container" class="mt-3" style="display: none;">
+                <h6 class="text-muted mb-2">预设选项（备选）</h6>
+                <div id="options-container" class="list-group">
+                    <!-- 选项将动态加载到这里 -->
+                </div>
             </div>
         </div>
     </div>
@@ -49,6 +84,8 @@
 <script>
     let currentStoryId = null;
     let currentSceneId = null;
+    let currentOptions = []; // 存储当前场景的选项
+    let isProcessing = false; // 防止重复提交
 
     document.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -67,7 +104,41 @@
                         </div>
                     </div>`;
         }
+
+        // 修改3: 为输入框添加事件监听
+        setupInputEvents();
     });
+
+    // 修改4: 设置输入框事件
+    function setupInputEvents() {
+        const input = document.getElementById('player-input');
+        const submitBtn = document.getElementById('submit-action');
+
+        // 输入时更新按钮状态
+        input.addEventListener('input', updateSubmitButtonState);
+
+        // 回车键提交（Ctrl+Enter或Cmd+Enter）
+        input.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                if (!isProcessing) {
+                    handlePlayerInput();
+                }
+            }
+        });
+
+        // 初始化按钮状态
+        updateSubmitButtonState();
+    }
+
+    // 修改5: 更新提交按钮状态
+    function updateSubmitButtonState() {
+        const input = document.getElementById('player-input');
+        const submitBtn = document.getElementById('submit-action');
+        const hasText = input.value.trim().length > 0;
+
+        submitBtn.disabled = !hasText || isProcessing;
+    }
 
     async function loadStory(storyId) {
         try {
@@ -75,14 +146,11 @@
             const result = await response.json();
             if (result && result.code === '200') {
                 const story = result.data;
-                // StoryDTO uses 'name' for title
                 document.getElementById('story-title').textContent = story.name || story.title || 'Untitled Story';
-                // Prefer explicit firstSceneId on story DTO
                 if (story.firstSceneId) {
                     loadScene(story.firstSceneId);
                     return;
                 }
-                // Fallback: attempt to fetch scenes list (if endpoint exists)
                 try {
                     const scenesResponse = await fetch(`/api/stories/${storyId}/scenes`);
                     const scenesResult = await scenesResponse.json();
@@ -105,9 +173,17 @@
         }
     }
 
+    // 修改6: 重写loadScene函数，保存选项但不直接显示
     async function loadScene(sceneId) {
         currentSceneId = sceneId;
-        document.getElementById('play-result').style.display = 'none'; // Hide previous result
+        document.getElementById('play-result').style.display = 'none';
+
+        // 重置AI输入界面
+        document.getElementById('ai-thinking').style.display = 'none';
+        document.getElementById('fallback-options-container').style.display = 'none';
+        document.getElementById('show-options-btn').textContent = '显示预设选项';
+        document.getElementById('player-input').value = '';
+
         try {
             const sceneResponse = await fetch(`/api/scenes/${sceneId}`);
             const sceneResult = await sceneResponse.json();
@@ -116,7 +192,7 @@
                 const scene = sceneResult.data;
                 document.getElementById('scene-title').textContent = scene.name || scene.title || '';
                 document.getElementById('scene-description').textContent = scene.text || scene.description || '';
-                // show scene picture if present
+
                 const sp = document.getElementById('scene-picture');
                 if (scene.picture) {
                     sp.src = scene.picture;
@@ -128,43 +204,32 @@
 
                 const optionsResponse = await fetch(`/api/scenes/${sceneId}/options`);
                 const optionsResult = await optionsResponse.json();
-                const optionsContainer = document.getElementById('options-container');
-                optionsContainer.innerHTML = '';
+
+                // 保存选项到全局变量
+                currentOptions = [];
 
                 if (optionsResult && optionsResult.code === '200' && optionsResult.data && optionsResult.data.length > 0) {
-                    optionsResult.data.forEach(option => {
-                        const optionEl = document.createElement('a');
-                        optionEl.href = '#';
-                        optionEl.className = 'list-group-item list-group-item-action option-btn mb-2';
+                    currentOptions = optionsResult.data;
 
-                        let optionText = option.text || option.description || '';
-                        let badgeHtml = '';
-                        if(option.type) {
-                            badgeHtml = `<span class="badge bg-warning text-dark ms-2">${option.type} &gt; ${option.dc}</span>`;
-                        }
-                        optionEl.innerHTML = `
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span>${optionText}</span>
-                                    ${badgeHtml}
-                                </div>
-                            `;
+                    // 修改7: 不直接显示选项，而是生成备选选项
+                    generateFallbackOptions();
 
-                        optionEl.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            handleOptionClick(option.id);
-                        });
-                        optionsContainer.appendChild(optionEl);
-                    });
+                    // 显示AI输入界面
+                    document.getElementById('ai-input-container').style.display = 'block';
                 } else {
-                    optionsContainer.innerHTML = `
-                            <div class="alert alert-info text-center">
-                                <h5>The story ends here!</h5>
-                                <p class="mb-0">You have reached the end of this story.</p>
-                                <button class="btn btn-outline-primary mt-3" onclick="window.location.href='/'">
-                                    Return to Lobby
-                                </button>
-                            </div>`;
+                    // 没有选项，故事结束
+                    document.getElementById('ai-input-container').innerHTML = `
+                        <div class="alert alert-info text-center">
+                            <h5>The story ends here!</h5>
+                            <p class="mb-0">You have reached the end of this story.</p>
+                            <button class="btn btn-outline-primary mt-3" onclick="window.location.href='/'">
+                                Return to Lobby
+                            </button>
+                        </div>`;
+                    currentOptions = [];
                 }
+
+                updateSubmitButtonState();
             } else {
                 showError(sceneResult ? sceneResult.msg : 'Failed to load scene');
             }
@@ -173,12 +238,182 @@
         }
     }
 
+    // 修改8: 生成备选选项（用于备选视图）
+    function generateFallbackOptions() {
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+
+        if (currentOptions.length > 0) {
+            currentOptions.forEach(option => {
+                const optionEl = document.createElement('a');
+                optionEl.href = '#';
+                optionEl.className = 'list-group-item list-group-item-action option-btn mb-2';
+
+                let optionText = option.text || option.description || '';
+                let badgeHtml = '';
+                if(option.type) {
+                    badgeHtml = `<span class="badge bg-warning text-dark ms-2">${option.type} &gt; ${option.dc}</span>`;
+                }
+                optionEl.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>${optionText}</span>
+                        ${badgeHtml}
+                    </div>
+                `;
+
+                optionEl.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    handleOptionClick(option.id);
+                });
+                optionsContainer.appendChild(optionEl);
+            });
+        }
+    }
+
+    // 修改9: 切换选项视图显示
+    function toggleOptionsView() {
+        const optionsContainer = document.getElementById('fallback-options-container');
+        const showBtn = document.getElementById('show-options-btn');
+
+        if (optionsContainer.style.display === 'none') {
+            optionsContainer.style.display = 'block';
+            showBtn.textContent = '隐藏预设选项';
+        } else {
+            optionsContainer.style.display = 'none';
+            showBtn.textContent = '显示预设选项';
+        }
+    }
+
+    // 修改10: 处理玩家输入（AI分析）
+    async function handlePlayerInput() {
+        if (isProcessing) return;
+
+        const input = document.getElementById('player-input');
+        const playerAction = input.value.trim();
+
+        if (!playerAction) {
+            showMessage('请输入您的行动描述', 'warning');
+            return;
+        }
+
+        if (currentOptions.length === 0) {
+            showMessage('当前场景没有可用选项，故事可能已结束。', 'warning');
+            return;
+        }
+
+        // 设置处理状态
+        isProcessing = true;
+        updateProcessingState(true);
+
+        try {
+            // 显示思考状态
+            const thinkingDiv = document.getElementById('ai-thinking');
+            thinkingDiv.style.display = 'block';
+
+            // 获取场景描述
+            const sceneDescription = document.getElementById('scene-description').textContent;
+
+            // 构建分支描述
+            const branches = currentOptions.map(opt => opt.text || opt.description || '');
+
+            // 调用AI分析接口
+            const response = await fetch('/api/ai/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    sceneDescription: sceneDescription,
+                    playerAction: playerAction,
+                    branches: branches
+                })
+            });
+
+            const result = await response.json();
+            thinkingDiv.style.display = 'none';
+
+            if (result && result.code === '200') {
+                // 解析AI返回的分支索引
+                const branchIndex = parseInt(result.data);
+
+                if (!isNaN(branchIndex) && branchIndex >= 0 && branchIndex < currentOptions.length) {
+                    // 找到匹配的分支，执行对应的选项
+                    const matchedOption = currentOptions[branchIndex];
+                    showMessage(`你刚才干了「${matchedOption.text}」对吧？`, 'success');
+
+                    // 延迟执行选项，让用户看到反馈
+                    setTimeout(() => {
+                        handleOptionClick(matchedOption.id);
+                    }, 1500);
+
+                } else if (branchIndex === -1) {
+                    // 没有匹配的分支
+                    showMessage('好像什么都没有发生……不然…试试做点别的？', 'warning');
+                    input.focus();
+                } else {
+                    // 无效的分支索引
+                    showMessage('哎呀，AI好像傻掉了呢，要不然再试试？', 'danger');
+                }
+            } else {
+                showMessage(result ? result.msg : 'AI在宇宙的某个角落失去了联系，再试一试吧。', 'danger');
+            }
+        } catch (error) {
+            console.error('AI分析错误:', error);
+            showMessage('处理行动时发生网络错误，请检查连接后重试。', 'danger');
+        } finally {
+            isProcessing = false;
+            updateProcessingState(false);
+        }
+    }
+
+    // 修改11: 更新处理状态
+    function updateProcessingState(processing) {
+        const submitBtn = document.getElementById('submit-action');
+        const submitText = document.getElementById('submit-text');
+        const thinkingIndicator = document.getElementById('thinking-indicator');
+
+        isProcessing = processing;
+        submitBtn.disabled = processing;
+
+        if (processing) {
+            submitText.textContent = '分析中...';
+            thinkingIndicator.style.display = 'inline-block';
+        } else {
+            submitText.textContent = '执行行动';
+            thinkingIndicator.style.display = 'none';
+        }
+
+        updateSubmitButtonState();
+    }
+
+    // 修改12: 显示消息函数
+    function showMessage(message, type = 'info') {
+        const playResultDiv = document.getElementById('play-result');
+        playResultDiv.style.display = 'block';
+        playResultDiv.textContent = message;
+
+        // 根据类型设置alert样式
+        const typeClass = {
+            'success': 'alert-success',
+            'warning': 'alert-warning',
+            'danger': 'alert-danger',
+            'info': 'alert-info'
+        }[type] || 'alert-info';
+
+        playResultDiv.className = `alert mt-3 ${typeClass}`;
+    }
+
+    // 保留原有的选项处理函数
     async function handleOptionClick(optionId) {
         const playResultDiv = document.getElementById('play-result');
         try {
             const response = await fetch('/api/game/play', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken()
+                },
                 body: JSON.stringify({ optionId: optionId })
             });
             const result = await response.json();
@@ -186,28 +421,21 @@
             playResultDiv.style.display = 'block';
 
             if (result && result.code === '200' && result.data) {
-                // result.data is PlayResult: { nextSceneId, roll, modifier, total, success }
                 const pr = result.data;
-                const details = `<strong>Roll:</strong> d20: ${pr.roll} + Modifier: ${pr.modifier} = Total: ${pr.total}`;
-                playResultDiv.innerHTML = `<h5>${result.msg || 'Check Result'}</h5><p class="mb-0">${details}</p>`;
+                const details = `（d20: ${pr.roll}，加值: ${pr.modifier}，总值: ${pr.total}）`;
+                playResultDiv.textContent = (result.msg || '检定') + ' ' + details;
+                playResultDiv.className = pr.success ? 'alert alert-success' : 'alert alert-danger';
 
-                // 无论成功或失败，都跳转到服务器返回的下一个场景（success 表示进入 success 场景，false 表示进入 fail 场景）
-                if (pr.success) {
-                    playResultDiv.className = 'alert alert-success';
-                } else {
-                    playResultDiv.className = 'alert alert-danger';
-                }
                 setTimeout(() => {
                     if (pr.nextSceneId) loadScene(pr.nextSceneId);
                 }, 1500);
             } else {
-                // Fallback: show message or raw response
                 playResultDiv.className = 'alert alert-warning';
-                playResultDiv.textContent = result ? (result.msg || JSON.stringify(result)) : 'Unknown response';
+                playResultDiv.textContent = result ? result.msg : '操作失败';
             }
         } catch (error) {
             playResultDiv.className = 'alert alert-danger';
-            playResultDiv.textContent = 'An unexpected error occurred during your action.';
+            playResultDiv.textContent = '操作执行失败';
             playResultDiv.style.display = 'block';
         }
     }
@@ -224,6 +452,11 @@
                         </button>
                     </div>
                 </div>`;
+    }
+
+    // 修改13: 获取CSRF Token的辅助函数
+    function getCsrfToken() {
+        return document.querySelector('meta[name="_csrf"]')?.getAttribute('content') || '';
     }
 </script>
 
@@ -258,6 +491,33 @@
 
     .text-purple {
         color: #9370DB !important;
+    }
+
+    /* 修改14: 为AI输入区域添加样式 */
+    #player-input {
+        border: 2px solid #DDA0DD;
+        border-radius: 8px;
+        resize: vertical;
+    }
+
+    #player-input:focus {
+        border-color: #8A2BE2;
+        box-shadow: 0 0 0 0.25rem rgba(138, 43, 226, 0.25);
+    }
+
+    #submit-action {
+        background: linear-gradient(135deg, #9370DB, #8A2BE2);
+        border: none;
+    }
+
+    #submit-action:hover:not(:disabled) {
+        background: linear-gradient(135deg, #8A2BE2, #9370DB);
+        transform: translateY(-1px);
+    }
+
+    #submit-action:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 </style>
 </body>

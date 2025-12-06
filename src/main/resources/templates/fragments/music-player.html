@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<div th:fragment="music-player">
+    <!-- 全局音乐播放器 -->
+    <div id="global-music-player">
+        <!-- 音乐状态提示 -->
+        <div id="music-status" class="music-status">音乐已加载</div>
+
+        <!-- 音量滑块 -->
+        <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.1" value="0.5">
+
+        <!-- 播放/暂停按钮 -->
+        <button id="music-toggle-btn" class="music-control-btn">
+            <i class="bi bi-music-note-beamed"></i>
+        </button>
+    </div>
+
+    <!-- 音频元素（隐藏） -->
+    <audio id="background-music" loop preload="auto">
+        <source th:src="@{/music/Two Steps From Hell - Star Sky - Instrumental.mp3}" type="audio/mpeg">
+        您的浏览器不支持音频播放。
+    </audio>
+
+    <script th:inline="javascript">
+        // 音乐播放器逻辑
+        document.addEventListener('DOMContentLoaded', function() {
+            const music = document.getElementById('background-music');
+            const toggleBtn = document.getElementById('music-toggle-btn');
+            const volumeSlider = document.getElementById('volume-slider');
+            const statusEl = document.getElementById('music-status');
+
+            // 设置默认音量
+            music.volume = volumeSlider.value;
+
+            // 播放/暂停切换
+            toggleBtn.addEventListener('click', function() {
+                if (music.paused) {
+                    music.play();
+                    toggleBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
+                    showStatus('音乐播放中 ♪');
+                } else {
+                    music.pause();
+                    toggleBtn.innerHTML = '<i class="bi bi-music-note-beamed"></i>';
+                    showStatus('音乐已暂停');
+                }
+            });
+
+            // 音量控制
+            volumeSlider.addEventListener('input', function() {
+                music.volume = this.value;
+                showStatus('音量: ' + Math.round(this.value * 100) + '%');
+            });
+
+            // 显示状态提示
+            function showStatus(text) {
+                statusEl.textContent = text;
+                statusEl.classList.add('show');
+                setTimeout(() => {
+                    statusEl.classList.remove('show');
+                }, 1500);
+            }
+
+            // 自动播放（需要用户交互后）
+            document.addEventListener('click', function initMusic() {
+                if (music.paused) {
+                    music.play().then(() => {
+                        toggleBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
+                    }).catch(e => {
+                        console.log('自动播放被阻止:', e);
+                    });
+                    document.removeEventListener('click', initMusic);
+                }
+            });
+
+            // 更新按钮图标
+            music.addEventListener('play', () => {
+                toggleBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
+            });
+            music.addEventListener('pause', () => {
+                toggleBtn.innerHTML = '<i class="bi bi-music-note-beamed"></i>';
+            });
+        });
+    </script>
+</div>
+</html>
