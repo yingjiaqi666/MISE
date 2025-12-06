@@ -25,7 +25,7 @@ body {
     background: url('../images/landscape/starsky.jpg') no-repeat center center fixed;
     background-size: cover;
     min-height: 100vh;
-    background-color: #2c3e50; /* 备用背景色 */
+    background-color: #8A2BE2; /* 备用背景色 */
 }
 
 /* Header样式 - 更新 */
@@ -390,5 +390,136 @@ h1, h2 {
         height: 35px;
         top: -10px;
         left: 40%;
+    }
+}
+
+/* ==================== */
+/* 全局音乐播放器样式 */
+/* ==================== */
+
+/* 音乐播放器容器 */
+#global-music-player {
+    position: fixed;
+    bottom: 100px; /* 放在 Guide 按钮上方 */
+    right: 20px;
+    z-index: 1001; /* 确保在 Guide 上方 */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 音乐控制按钮 */
+.music-control-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #9370DB, #8A2BE2);
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(147, 112, 219, 0.4);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.music-control-btn:hover {
+    transform: scale(1.1) rotate(10deg);
+    box-shadow: 0 6px 16px rgba(147, 112, 219, 0.6);
+}
+
+.music-control-btn:active {
+    transform: scale(0.95);
+}
+
+/* 音量滑块 */
+.volume-slider {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    outline: none;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.volume-slider:hover {
+    opacity: 1;
+}
+
+.volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #9370DB;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.volume-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #9370DB;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    border: none;
+}
+
+/* 音乐状态提示 */
+.music-status {
+    font-size: 0.8rem;
+    color: #DDA0DD;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 4px 8px;
+    border-radius: 10px;
+    backdrop-filter: blur(5px);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.music-status.show {
+    opacity: 1;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    #global-music-player {
+        bottom: 90px;
+        right: 15px;
+    }
+
+    .music-control-btn {
+        width: 45px;
+        height: 45px;
+        font-size: 1.3rem;
+    }
+
+    .volume-slider {
+        width: 80px;
+    }
+}
+
+@media (max-width: 480px) {
+    #global-music-player {
+        bottom: 80px;
+        right: 10px;
+    }
+
+    .music-control-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1.1rem;
+    }
+
+    .volume-slider {
+        width: 70px;
     }
 }
