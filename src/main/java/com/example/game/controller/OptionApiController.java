@@ -47,4 +47,14 @@ public class OptionApiController {
         optionService.updateOption(option.getId(), option);
         return ResponseEntity.ok(ApiResponse.success("更新成功"));
     }
+    @PutMapping("/{optionId}")  // 修改路径，添加optionId参数
+    public ResponseEntity<ApiResponse<String>> updateOption(@PathVariable Long optionId, @RequestBody Option option) {
+        if (optionService.findById(optionId) == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("400", "选项不存在"));
+        }
+        // 确保使用路径中的optionId
+        option.setId(optionId);
+        optionService.updateOption(optionId, option);
+        return ResponseEntity.ok(ApiResponse.success("更新成功"));
+    }
 }

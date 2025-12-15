@@ -69,6 +69,11 @@
     document.addEventListener('DOMContentLoaded', function() {
         const urlParams = new URLSearchParams(window.location.search);
         const sceneId = urlParams.get('sceneId');
+        const tutorialMode = urlParams.get('tutorial');
+        const tutorialStep = urlParams.get('step');
+        const nextScene = urlParams.get('nextScene');
+        const returnToMyScenes = urlParams.get('returnToMyScenes');
+        const connectionIndex = urlParams.get('connectionIndex');
 
         // First load the current user's scenes so we can populate success/fail selects
         loadUserScenes().then(() => {
@@ -90,18 +95,1216 @@
                             }
                             // load existing options
                             loadOptionsForScene(sceneId);
+
+                            // 检查是否是场景连接演示模式
+                            if (tutorialMode === 'connect' && nextScene) {
+                                setTimeout(() => {
+                                    executeSceneConnectionDemo(nextScene, returnToMyScenes, connectionIndex);
+                                }, 2000);
+                            }
                         } else {
                             alert('Error fetching scene: ' + (result ? result.msg : 'Unknown'));
                         }
                     });
+            }
+
+            // 检查是否是自动演示模式
+            if (tutorialMode === 'auto' && tutorialStep) {
+                setTimeout(() => {
+                    executeSceneEditorDemo(parseInt(tutorialStep));
+                }, 1500);
             }
         }).catch(err => {
             console.error('Failed to load user scenes', err);
             // still try to load scene options even if user scenes failed
             if (sceneId) loadOptionsForScene(sceneId);
         });
+        // 在演示模式下阻止表单提交
+        const form = document.getElementById('scene-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const tutorialMode = urlParams.get('tutorial');
+
+                // 如果是演示模式，阻止默认提交
+                if (tutorialMode === 'connect' || tutorialMode === 'auto') {
+                    console.log('演示模式：阻止表单默认提交');
+                    e.preventDefault();
+                    return false;
+                }
+            });
+        }
     });
 
+    // 完全修复的场景连接演示函数
+    async function executeSceneConnectionDemo(nextSceneName, returnToMyScenes, connectionIndex) {
+        // 创建遮罩层
+        createTutorialOverlay();
+
+        const currentSceneName = document.getElementById('name').value;
+
+        // 步骤1: 介绍场景连接
+        await showTutorialStepWithOverlay(
+            '.card',
+            '设置场景连接',
+            `现在为${currentSceneName}场景设置连接到${nextSceneName}场景。`,
+            3000
+        );
+
+        // 等待页面完全加载选项
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // 调试：打印页面结构
+        debugOptionsStructure();
+
+        // 步骤2: 检查并使用现有选项 - 绝不创建新选项
+        let optionGroups = document.querySelectorAll('#options-container .option-group');
+        console.log(`当前有 ${optionGroups.length} 个选项组`);
+
+        let targetOptionGroup = null;
+
+        if (optionGroups.length > 0) {
+            // 有现有选项，使用第一个
+            console.log('发现现有选项，使用第一个选项');
+            targetOptionGroup = optionGroups[0];
+        } else {
+            // 没有选项，但在连接演示中这不应该发生
+            console.error('警告：在场景连接演示中没有找到现有选项！');
+
+            // 作为最后手段，创建一个选项
+            const addOptionBtn = document.getElementById('add-option-btn');
+            if (addOptionBtn) {
+                await showTutorialStep(
+                    addOptionBtn,
+                    '添加选项',
+                    '场景需要至少一个选项来设置连接',
+                    2000
+                );
+
+                await simulateClick(addOptionBtn, '正在添加选项...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // 重新获取选项组
+                optionGroups = document.querySelectorAll('#options-container .option-group');
+                targetOptionGroup = optionGroups[0];
+            }
+        }
+
+        // 步骤3: 确保选项有文本内容
+        if (targetOptionGroup) {
+            const optionTextInput = targetOptionGroup.querySelector('.option-text');
+            if (optionTextInput) {
+                const currentText = optionTextInput.value.trim();
+                console.log(`当前选项文本: "${currentText}"`);
+
+                if (!currentText || currentText === '') {
+                    await showTutorialStep(
+                        optionTextInput,
+                        '设置选项文本',
+                        '设置选项文本为"Continue"',
+                        2000
+                    );
+                    await simulateInput(optionTextInput, 'Continue');
+                } else {
+                    console.log(`选项已有文本，跳过输入步骤: ${currentText}`);
+                }
+            }
+        }
+
+        // 等待并重新调试
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        debugOptionsStructure();
+
+        // 步骤4: 设置成功场景连接
+        const successSelect = findSuccessSceneSelect();
+
+        if (successSelect) {
+            // 检查当前选择的值
+            const currentValue = successSelect.value;
+            console.log(`Success选择框当前值: ${currentValue}`);
+
+            await showTutorialStep(
+                successSelect,
+                '设置成功场景',
+                `在Success Scene下拉框中选择${nextSceneName}场景`,
+                2000
+            );
+
+            // 只有在值不同时才选择
+            const targetOption = Array.from(successSelect.options).find(opt =>
+                opt.textContent.toLowerCase().includes(nextSceneName.toLowerCase())
+            );
+
+            if (targetOption && targetOption.value !== currentValue) {
+                await simulateSelectOption(successSelect, nextSceneName);
+            } else {
+                console.log('Success场景已正确设置，跳过选择步骤');
+            }
+        } else {
+            console.error('无法找到success场景选择框');
+            await showTutorialStepWithOverlay(
+                '.card',
+                '查找选择框失败',
+                '无法找到Success Scene选择框，请手动设置场景连接。',
+                3000
+            );
+        }
+
+        // 步骤5: 保存场景
+        const saveBtn = document.querySelector('button[type="submit"]');
+        if (saveBtn) {
+            await showTutorialStep(
+                saveBtn,
+                '保存场景连接',
+                '点击"Save Scene"保存场景连接设置',
+                2000
+            );
+
+            // 使用AJAX保存
+            await simulateSceneConnectionSaveWithAjax('正在保存场景连接...');
+        }
+
+        // 等待保存完成
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 步骤6: 继续下一个连接或完成演示
+        if (returnToMyScenes === 'true') {
+            const nextIndex = parseInt(connectionIndex) + 1;
+
+            if (nextIndex < 3) {
+                await showTutorialStepWithOverlay(
+                    '.card',
+                    '场景连接完成',
+                    `${currentSceneName}场景连接设置完成！返回My Scenes继续设置下一个场景连接。`,
+                    2000
+                );
+
+                removeTutorialOverlay();
+                window.location.href = `/my-scenes?tutorial=continue&connectionIndex=${nextIndex}`;
+            } else {
+                await showTutorialStepWithOverlay(
+                    '.card',
+                    '场景连接演示完成',
+                    '恭喜！所有场景连接都已设置完成。现在我们将演示如何创建完整的故事！',
+                    3000
+                );
+
+                await showTutorialStepWithOverlay(
+                    '.card',
+                    '跳转到故事创建',
+                    '正在跳转到Story Editor页面，演示如何创建完整的交互式故事...',
+                    2000
+                );
+
+                removeTutorialOverlay();
+                window.location.href = '/story-editor?tutorial=auto';
+            }
+        }
+    }
+    // 修复后的AJAX保存函数
+    function simulateSceneConnectionSaveWithAjax(message) {
+        return new Promise(async (resolve) => {
+            const tooltip = createOperationTooltip(message);
+            const saveBtn = document.querySelector('button[type="submit"]');
+
+            if (saveBtn) {
+                saveBtn.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+                saveBtn.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+            }
+
+            setTimeout(async () => {
+                try {
+                    const sceneId = document.getElementById('sceneId').value;
+                    const sceneName = document.getElementById('name').value;
+                    const sceneText = document.getElementById('text').value;
+                    const scenePicture = document.getElementById('picture').value;
+
+                    // 保存场景基本信息
+                    const sceneData = {
+                        name: sceneName,
+                        text: sceneText,
+                        picture: scenePicture
+                    };
+
+                    console.log('保存场景数据:', sceneData);
+
+                    let saveResponse;
+                    if (sceneId) {
+                        saveResponse = await fetch(`/api/scenes/${sceneId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(sceneData)
+                        });
+                    } else {
+                        saveResponse = await fetch('/api/scenes', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(sceneData)
+                        });
+                    }
+
+                    const saveResult = await saveResponse.json();
+                    console.log('场景保存结果:', saveResult);
+
+                    if (saveResult && saveResult.code === '200') {
+                        const finalSceneId = sceneId || saveResult.data;
+
+                        // 关键修复：只处理有效的选项
+                        const optionGroups = document.querySelectorAll('#options-container .option-group');
+                        console.log(`找到 ${optionGroups.length} 个选项组`);
+
+                        for (let group of optionGroups) {
+                            const optionId = group.querySelector('input[name="optionId"]')?.value;
+                            const optionText = group.querySelector('.option-text')?.value?.trim();
+
+                            // 只处理有文本内容的选项
+                            if (!optionText || optionText === '') {
+                                console.log('跳过空白选项');
+                                continue;
+                            }
+
+                            // 查找success和fail选择框
+                            let successSceneId = null;
+                            let failSceneId = null;
+
+                            const selects = group.querySelectorAll('select');
+                            for (let select of selects) {
+                                const selectName = select.name || '';
+                                const selectId = select.id || '';
+                                const label = select.previousElementSibling;
+                                const labelText = label ? label.textContent : '';
+
+                                if (selectName.includes('success') || selectId.includes('success') || labelText.includes('Success')) {
+                                    if (select.value && select.value !== '') {
+                                        successSceneId = parseInt(select.value);
+                                        console.log(`Success场景ID: ${successSceneId}`);
+                                    }
+                                } else if (selectName.includes('fail') || selectId.includes('fail') || labelText.includes('Fail')) {
+                                    if (select.value && select.value !== '') {
+                                        failSceneId = parseInt(select.value);
+                                        console.log(`Fail场景ID: ${failSceneId}`);
+                                    }
+                                }
+                            }
+
+                            const optionType = group.querySelector('.option-type-select')?.value || '';
+                            const dc = group.querySelector('.dc-input')?.value || 0;
+
+                            const optionData = {
+                                text: optionText,
+                                success: successSceneId,
+                                fail: failSceneId,
+                                type: optionType,
+                                dc: parseInt(dc) || 0,
+                                sceneId: finalSceneId
+                            };
+
+                            console.log('准备保存选项数据:', optionData);
+
+                            let optionResponse;
+                            if (optionId && optionId !== '' && optionId !== 'undefined') {
+                                // 更新现有选项
+                                console.log(`更新选项ID: ${optionId}`);
+                                optionResponse = await fetch(`/api/options/${optionId}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(optionData)
+                                });
+                            } else {
+                                // 创建新选项
+                                console.log('创建新选项');
+                                optionResponse = await fetch('/api/options/create', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(optionData)
+                                });
+                            }
+
+                            const optionResult = await optionResponse.json();
+                            console.log('选项保存结果:', optionResult);
+
+                            if (optionResult && optionResult.code === '200') {
+                                console.log('选项保存成功');
+                                // 如果是新创建的选项，更新optionId
+                                if (!optionId && optionResult.data) {
+                                    const optionIdInput = group.querySelector('input[name="optionId"]');
+                                    if (optionIdInput) {
+                                        optionIdInput.value = optionResult.data;
+                                    }
+                                }
+                            } else {
+                                console.error('选项保存失败:', optionResult ? optionResult.msg : 'Unknown error');
+                            }
+                        }
+
+                        console.log('场景和选项保存完成');
+                    } else {
+                        console.error('场景保存失败:', saveResult ? saveResult.msg : 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error('保存场景连接时发生错误:', error);
+                }
+
+                // 恢复样式
+                if (saveBtn) {
+                    saveBtn.style.boxShadow = '';
+                    saveBtn.style.backgroundColor = '';
+                }
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+    // 阻止表单的默认提交行为（在演示模式下）
+
+
+    // 调试函数：打印页面结构
+    function debugOptionsStructure() {
+        console.log('=== 调试选项结构 ===');
+        const optionsContainer = document.getElementById('options-container');
+        if (optionsContainer) {
+            console.log('Options Container HTML:', optionsContainer.innerHTML);
+
+            const selects = optionsContainer.querySelectorAll('select');
+            console.log(`找到 ${selects.length} 个select元素`);
+
+            selects.forEach((select, index) => {
+                console.log(`Select ${index}:`, select);
+                console.log(`  - 选项数量: ${select.options.length}`);
+                console.log(`  - 当前值: ${select.value}`);
+                console.log(`  - 父元素: `, select.parentElement);
+
+                Array.from(select.options).forEach((option, optIndex) => {
+                    console.log(`    选项 ${optIndex}: ${option.textContent} (value: ${option.value})`);
+                });
+            });
+        } else {
+            console.log('未找到options-container');
+        }
+    }
+
+    // 改进的查找success场景选择框函数
+    function findSuccessSceneSelect() {
+        console.log('=== 开始查找success场景选择框 ===');
+
+        // 策略1: 在选项组中查找
+        const optionGroups = document.querySelectorAll('#options-container .option-group');
+        console.log(`找到 ${optionGroups.length} 个选项组`);
+
+        for (let i = 0; i < optionGroups.length; i++) {
+            const group = optionGroups[i];
+            console.log(`检查选项组 ${i + 1}:`);
+
+            const selects = group.querySelectorAll('select');
+            console.log(`  - 找到 ${selects.length} 个选择框`);
+
+            for (let j = 0; j < selects.length; j++) {
+                const select = selects[j];
+                const selectName = select.name || '';
+                const selectId = select.id || '';
+                const label = select.previousElementSibling;
+                const labelText = label ? label.textContent : '';
+
+                console.log(`  - 选择框 ${j + 1}: name="${selectName}", id="${selectId}", label="${labelText}"`);
+
+                // 检查是否是success选择框
+                if (selectName.includes('success') ||
+                    selectId.includes('success') ||
+                    labelText.toLowerCase().includes('success')) {
+                    console.log('  ✓ 找到success选择框!');
+                    return select;
+                }
+            }
+        }
+
+        // 策略2: 全局查找包含场景选项的select
+        console.log('策略1失败，尝试策略2...');
+        const allSelects = document.querySelectorAll('#options-container select');
+        console.log(`全局找到 ${allSelects.length} 个选择框`);
+
+        for (let select of allSelects) {
+            const options = select.querySelectorAll('option');
+            let hasSceneOptions = false;
+
+            for (let option of options) {
+                if (option.textContent.includes('party') ||
+                    option.textContent.includes('see') ||
+                    option.textContent.includes('hole') ||
+                    option.textContent.includes('world')) {
+                    hasSceneOptions = true;
+                    break;
+                }
+            }
+
+            if (hasSceneOptions) {
+                console.log('✓ 通过选项内容找到场景选择框');
+                return select;
+            }
+        }
+
+        console.error('❌ 未找到success场景选择框');
+        return null;
+    }
+
+    // 模拟选择下拉框选项
+    function simulateSelectOption(selectElement, optionText) {
+        return new Promise((resolve) => {
+            console.log(`开始选择选项: ${optionText}`);
+
+            // 高亮元素
+            selectElement.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            selectElement.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            // 显示操作提示
+            const tooltip = createOperationTooltip(`正在选择${optionText}场景...`);
+
+            setTimeout(() => {
+                // 查找并选择对应的选项
+                const options = selectElement.querySelectorAll('option');
+                let found = false;
+
+                console.log(`在选择框中查找选项 "${optionText}"`);
+                console.log(`选择框包含 ${options.length} 个选项:`);
+
+                for (let i = 0; i < options.length; i++) {
+                    const option = options[i];
+                    console.log(`  选项 ${i}: value="${option.value}", text="${option.textContent}"`);
+
+                    if (option.textContent.toLowerCase().includes(optionText.toLowerCase()) ||
+                        option.value.toString().includes(optionText)) {
+                        console.log(`✓ 找到匹配选项: ${option.textContent}`);
+                        selectElement.value = option.value;
+                        selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    console.error(`❌ 未找到匹配的选项: ${optionText}`);
+                }
+
+                // 恢复样式
+                selectElement.style.boxShadow = '';
+                selectElement.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+    // 模拟场景连接保存
+    function simulateSceneConnectionSave(element, message) {
+        return new Promise(async (resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            element.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            setTimeout(async () => {
+                try {
+                    // 模拟点击保存按钮
+                    element.click();
+                    console.log('场景连接保存成功');
+                } catch (error) {
+                    console.error('保存场景连接时发生错误:', error);
+                }
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 模拟点击操作
+    function simulateClick(element, message) {
+        return new Promise((resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            element.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            setTimeout(() => {
+                // 模拟点击
+                element.click();
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 创建操作提示框
+    function createOperationTooltip(message) {
+        const tooltip = document.createElement('div');
+        tooltip.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(147, 112, 219, 0.75);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: bold;
+        z-index: 10002;
+        animation: fadeIn 0.3s ease;
+        box-shadow: 0 4px 12px rgba(147, 112, 219, 0.4);
+        border: 1px solid #9370DB;
+        backdrop-filter: blur(10px);
+    `;
+        tooltip.textContent = message;
+        document.body.appendChild(tooltip);
+        return tooltip;
+    }
+
+    // 通用的元素查找函数
+    function findSuccessSceneSelect() {
+        // 尝试多种选择器策略
+        const strategies = [
+            // 策略1: 直接XPath转CSS选择器
+            () => document.querySelector('#options-container > div > div:nth-child(2) > div:first-child > select'),
+
+            // 策略2: 通过标签文本查找
+            () => {
+                const labels = document.querySelectorAll('#options-container label');
+                for (let label of labels) {
+                    if (label.textContent.includes('Success Scene') || label.textContent.includes('Success')) {
+                        return label.parentElement.querySelector('select') ||
+                            label.nextElementSibling?.querySelector('select') ||
+                            label.closest('.col-md-6')?.querySelector('select') ||
+                            label.closest('div')?.querySelector('select');
+                    }
+                }
+                return null;
+            },
+
+            // 策略3: 通过位置查找（第一个select）
+            () => document.querySelector('#options-container select:first-of-type'),
+
+            // 策略4: 通过类名查找
+            () => document.querySelector('#options-container .success-scene-select'),
+
+            // 策略5: 遍历所有select，找到包含场景选项的
+            () => {
+                const selects = document.querySelectorAll('#options-container select');
+                for (let select of selects) {
+                    const options = select.querySelectorAll('option');
+                    // 检查是否包含场景选项（通常场景选项会有特定的值格式）
+                    for (let option of options) {
+                        if (option.textContent.includes('party') ||
+                            option.textContent.includes('see') ||
+                            option.textContent.includes('hole') ||
+                            option.textContent.includes('world')) {
+                            return select;
+                        }
+                    }
+                }
+                return null;
+            }
+        ];
+
+        // 依次尝试每种策略
+        for (let i = 0; i < strategies.length; i++) {
+            try {
+                const element = strategies[i]();
+                if (element) {
+                    console.log(`成功找到success场景选择框，使用策略 ${i + 1}`);
+                    return element;
+                }
+            } catch (error) {
+                console.log(`策略 ${i + 1} 失败:`, error);
+            }
+        }
+
+        console.error('所有策略都失败，无法找到success场景选择框');
+        return null;
+    }
+
+    // 模拟点击操作
+    function simulateClick(element, message) {
+        return new Promise((resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            element.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            setTimeout(() => {
+                // 模拟点击
+                element.click();
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 创建操作提示框
+    function createOperationTooltip(message) {
+        const tooltip = document.createElement('div');
+        tooltip.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(147, 112, 219, 0.75);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: bold;
+        z-index: 10002;
+        animation: fadeIn 0.3s ease;
+        box-shadow: 0 4px 12px rgba(147, 112, 219, 0.4);
+        border: 1px solid #9370DB;
+        backdrop-filter: blur(10px);
+    `;
+        tooltip.textContent = message;
+        document.body.appendChild(tooltip);
+        return tooltip;
+    }
+
+
+    // 带有蒙版效果的教程步骤显示（类似保存场景的效果）
+    // 简单的蒙版提示（只显示蒙版和中央文字）
+    function showTutorialStepWithOverlay(targetElement, title, description, duration) {
+        return new Promise((resolve) => {
+            // 创建中央提示框（在现有蒙版上显示）
+            const centerTooltip = document.createElement('div');
+            centerTooltip.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(147, 112, 219, 0.75);
+            color: white;
+            padding: 25px 35px;
+            border-radius: 12px;
+            font-weight: bold;
+            z-index: 10001;
+            text-align: center;
+            animation: fadeIn 0.3s ease;
+            box-shadow: 0 8px 32px rgba(147, 112, 219, 0.4);
+            border: 2px solid #9370DB;
+            min-width: 300px;
+        `;
+
+            centerTooltip.innerHTML = `
+            <h5 style="color: white; margin-bottom: 15px; font-size: 1.3rem;">${title}</h5>
+            <p style="margin: 0; line-height: 1.6; color: #F8F8FF; font-size: 1.1rem;">${description}</p>
+        `;
+
+            document.body.appendChild(centerTooltip);
+
+            // 自动移除提示框
+            setTimeout(() => {
+                if (centerTooltip && centerTooltip.parentNode) {
+                    centerTooltip.remove();
+                }
+
+                // 移除遮罩层
+                removeTutorialOverlay();
+
+                resolve();
+            }, duration);
+        });
+    }
+
+
+    // Scene Editor自动演示函数
+    async function executeSceneEditorDemo(step) {
+        // 创建遮罩层
+        createTutorialOverlay();
+
+        // 场景数据配置
+        const sceneConfigs = [
+            {
+                name: 'party',
+                text: 'Alice ran away from the party.',
+                imageName: '1.png',
+                optionText: 'Next',
+                title: '第一个场景：派对'
+            },
+            {
+                name: 'see',
+                text: 'Alice saw a strange rabbit.',
+                imageName: '2.png',
+                optionText: 'chase',
+                title: '第二个场景：看见兔子'
+            },
+            {
+                name: 'hole',
+                text: 'Alice chased the rabbit into a tree hole.',
+                imageName: '3.png',
+                optionText: 'jump',
+                title: '第三个场景：树洞'
+            },
+            {
+                name: 'world',
+                text: 'Alice arrived in a fantastical world.',
+                imageName: '4.png',
+                optionText: null, // 第四个场景没有选项
+                title: '第四个场景：奇幻世界'
+            }
+        ];
+
+        const config = sceneConfigs[step - 1];
+
+        // 步骤1: 介绍场景编辑器
+        await showTutorialStepWithOverlay(
+            '.card',
+            config.title,
+            `现在开始创建${config.title}。我将演示如何填写场景信息、上传图片和添加选项。`,
+            3000
+        );
+
+        // 步骤2: 填写场景名称
+        await showTutorialStep(
+            '#name',
+            '场景名称',
+            `设置场景名称为：${config.name}`,
+            2000
+        );
+        await simulateInput(document.getElementById('name'), config.name);
+
+        // 步骤3: 填写场景文本
+        await showTutorialStep(
+            '#text',
+            '场景描述',
+            `设置场景描述为：${config.text}`,
+            2000
+        );
+        await simulateInput(document.getElementById('text'), config.text);
+
+        // 步骤4: 模拟上传图片
+        await showTutorialStep(
+            '#pictureFile',
+            '场景图片',
+            `上传图片：${config.imageName}`,
+            2000
+        );
+        await simulateImageUpload(config.imageName);
+
+        // 步骤5: 添加选项（如果需要）
+        if (config.optionText) {
+            await showTutorialStep(
+                '#add-option-btn',
+                '添加选项',
+                '点击"Add Option"按钮添加场景选项',
+                2000
+            );
+            await simulateClick(document.getElementById('add-option-btn'), '正在添加选项...');
+
+            // 等待选项元素创建
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // 填写选项文本
+            const optionTextInput = document.querySelector('.option-text');
+            if (optionTextInput) {
+                await showTutorialStep(
+                    optionTextInput,
+                    '选项文本',
+                    `设置选项文本为：${config.optionText}`,
+                    2000
+                );
+                await simulateInput(optionTextInput, config.optionText);
+            }
+        }
+
+        // 步骤6: 保存场景
+        const saveBtn = document.querySelector('button[type="submit"]');
+        await showTutorialStep(
+            saveBtn,
+            '保存场景',
+            '点击"Save Scene"保存场景',
+            2000
+        );
+
+        await simulateSceneSave(saveBtn, '正在保存场景...');
+
+        // 等待保存完成
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 演示完成，询问是否继续下一个场景
+        if (step < 4) {
+            // 使用和保存场景一样的蒙版效果
+            await showTutorialStepWithOverlay(
+                '.card',
+                '场景创建完成',
+                `${config.title}创建完成！现在继续创建下一个场景。`,
+                2000
+            );
+
+            // 跳转到下一个场景的创建
+            window.location.href = `/scene-editor?tutorial=auto&step=${step + 1}`;
+        } else {
+            await showTutorialStepWithOverlay(
+                '.card',
+                '所有场景创建完成',
+                '恭喜！您已经成功创建了所有四个场景。现在我们将演示如何连接这些场景。',
+                3000
+            );
+
+            // 询问是否继续场景连接演示
+            const continueDemo = confirm('场景创建演示完成！是否继续演示如何连接场景？');
+
+            if (continueDemo) {
+                // 跳转到My Scenes页面进行场景连接演示
+                removeTutorialOverlay();
+                window.location.href = '/my-scenes?tutorial=auto';
+            } else {
+                removeTutorialOverlay();
+                alert('场景编辑演示完成！您已经学会了如何创建和编辑场景。');
+            }
+        }
+    }
+
+    // 模拟图片上传
+    async function simulateImageUpload(imageName) {
+        return new Promise((resolve) => {
+            // 高亮文件输入框
+            const fileInput = document.getElementById('pictureFile');
+            fileInput.style.boxShadow = '0 0 20px 5px rgba(255, 215, 0, 0.8)';
+            fileInput.style.backgroundColor = 'rgba(255, 215, 0, 0.2)';
+
+            // 显示操作提示
+            const tooltip = createOperationTooltip(`正在上传图片：${imageName}`);
+
+            setTimeout(() => {
+                // 模拟图片上传成功，设置图片URL
+                const imageUrl = `/images/landscape/${imageName}`;
+                document.getElementById('picture').value = imageUrl;
+
+                // 显示预览
+                const preview = document.getElementById('picturePreview');
+                preview.src = imageUrl;
+                document.getElementById('picture-preview-container').style.display = 'block';
+
+                // 恢复样式
+                fileInput.style.boxShadow = '';
+                fileInput.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 2000);
+        });
+    }
+
+    // 模拟场景保存
+    function simulateSceneSave(element, message) {
+        return new Promise(async (resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(255, 215, 0, 0.8)';
+            element.style.backgroundColor = 'rgba(255, 215, 0, 0.2)';
+
+            setTimeout(async () => {
+                try {
+                    // 收集场景数据
+                    const sceneData = {
+                        name: document.getElementById('name').value,
+                        text: document.getElementById('text').value,
+                        picture: document.getElementById('picture').value
+                    };
+
+                    // 提交场景数据
+                    const response = await fetch('/api/scenes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(sceneData)
+                    });
+
+                    const result = await response.json();
+
+                    if (result && result.code === '200') {
+                        const savedSceneId = result.data;
+
+                        // 保存选项（如果有）
+                        const optionGroups = document.querySelectorAll('.option-group');
+                        if (optionGroups.length > 0) {
+                            for (let group of optionGroups) {
+                                const optionText = group.querySelector('.option-text').value;
+                                if (optionText) {
+                                    const optionData = {
+                                        text: optionText,
+                                        success: null,
+                                        fail: null,
+                                        type: '',
+                                        dc: 0,
+                                        sceneId: savedSceneId
+                                    };
+
+                                    await fetch('/api/options/create', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(optionData)
+                                    });
+                                }
+                            }
+                        }
+
+                        console.log('场景保存成功');
+                    } else {
+                        console.error('场景保存失败:', result ? result.msg : 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error('保存场景时发生错误:', error);
+                }
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 模拟点击操作
+    function simulateClick(element, message) {
+        return new Promise((resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(255, 215, 0, 0.8)';
+            element.style.backgroundColor = 'rgba(255, 215, 0, 0.2)';
+
+            setTimeout(() => {
+                // 模拟点击
+                element.click();
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 模拟输入操作
+    function simulateInput(element, value) {
+        return new Promise((resolve) => {
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(255, 215, 0, 0.8)';
+            element.style.backgroundColor = 'rgba(255, 215, 0, 0.2)';
+
+            // 清空并逐字输入
+            element.value = '';
+            element.focus();
+
+            let i = 0;
+            const inputInterval = setInterval(() => {
+                if (i < value.length) {
+                    element.value += value[i];
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                    i++;
+                } else {
+                    clearInterval(inputInterval);
+
+                    // 恢复样式
+                    element.style.boxShadow = '';
+                    element.style.backgroundColor = '';
+
+                    resolve();
+                }
+            }, 100);
+        });
+    }
+
+    // 创建操作提示框
+    function createOperationTooltip(message) {
+        const tooltip = document.createElement('div');
+        tooltip.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 215, 0, 0.65);
+            color: #333;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 10002;
+            animation: fadeIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        `;
+        tooltip.textContent = message;
+        document.body.appendChild(tooltip);
+        return tooltip;
+    }
+
+    // 创建教程遮罩层
+    function createTutorialOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'tutorial-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            pointer-events: none;
+            backdrop-filter: blur(2px);
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    // 显示教程步骤
+    function showTutorialStep(targetElement, title, description, duration) {
+        return new Promise((resolve) => {
+            const target = typeof targetElement === 'string'
+                ? document.getElementById(targetElement) || document.querySelector(targetElement)
+                : targetElement;
+
+            if (!target) {
+                resolve();
+                return;
+            }
+
+            // 滚动到目标元素
+            target.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+
+            // 高亮目标元素
+            const originalStyle = {
+                position: target.style.position,
+                zIndex: target.style.zIndex,
+                boxShadow: target.style.boxShadow,
+                borderRadius: target.style.borderRadius,
+                backgroundColor: target.style.backgroundColor
+            };
+
+            target.style.position = 'relative';
+            target.style.zIndex = '10000';
+            target.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            target.style.borderRadius = '8px';
+            target.style.backgroundColor = 'rgba(147, 112, 219, 0.1)';
+
+            // 创建提示框
+            const tooltip = document.createElement('div');
+            tooltip.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                padding: 25px;
+                border-radius: 12px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                max-width: 400px;
+                z-index: 10001;
+                text-align: center;
+                animation: fadeIn 0.3s ease;
+                border: 2px solid #9370DB;
+            `;
+
+            tooltip.innerHTML = `
+                <h5 style="color: #9370DB; margin-bottom: 15px;">${title}</h5>
+                <p style="margin-bottom: 20px; line-height: 1.6; color: #333;">${description}</p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button onclick="nextTutorialStep()" class="btn btn-primary">继续 →</button>
+                    <button onclick="skipTutorial()" class="btn btn-outline-secondary">跳过教程</button>
+                </div>
+            `;
+
+            document.body.appendChild(tooltip);
+
+            window.nextTutorialStep = () => {
+                // 恢复原始样式
+                Object.keys(originalStyle).forEach(key => {
+                    target.style[key] = originalStyle[key];
+                });
+                tooltip.remove();
+                resolve();
+            };
+
+            window.skipTutorial = () => {
+                // 恢复原始样式
+                Object.keys(originalStyle).forEach(key => {
+                    target.style[key] = originalStyle[key];
+                });
+                tooltip.remove();
+                removeTutorialOverlay();
+                alert('教程已跳过！');
+            };
+
+            // 自动继续
+            if (duration) {
+                setTimeout(() => {
+                    if (document.body.contains(tooltip)) {
+                        window.nextTutorialStep();
+                    }
+                }, duration);
+            }
+        });
+    }
+
+    // 移除教程遮罩层
+    function removeTutorialOverlay() {
+        const overlay = document.getElementById('tutorial-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+
+    // 原有的其他函数保持不变
     document.getElementById('add-option-btn').addEventListener('click', function() {
         addOptionInput(null);
     });

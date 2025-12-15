@@ -78,14 +78,495 @@
     document.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         const storyId = urlParams.get('storyId');
+        const tutorialMode = urlParams.get('tutorial');
+
         // Load user's scenes for selection of starting scene
-        loadUserScenes();
-        if (storyId) {
-            currentStoryId = storyId;
-            loadStoryForEditing(storyId);
+        loadUserScenes().then(() => {
+            if (storyId) {
+                currentStoryId = storyId;
+                loadStoryForEditing(storyId);
+            }
+
+            // 检查是否是自动演示模式
+            if (tutorialMode === 'auto') {
+                setTimeout(() => {
+                    executeCreateStoryDemo();
+                }, 2000);
+            }
+        });
+
+        // 在演示模式下阻止表单提交
+        const form = document.getElementById('story-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const tutorialMode = urlParams.get('tutorial');
+
+                // 如果是演示模式，但不是通过 simulateStorySave 触发的，则阻止
+                if (tutorialMode === 'auto' && !window.isDemoSaving) {
+                    console.log('演示模式：阻止非演示保存的表单提交');
+                    e.preventDefault();
+                    return false;
+                }
+            });
         }
     });
 
+    // Create Story 自动演示函数
+    async function executeCreateStoryDemo() {
+        // 创建遮罩层
+        createTutorialOverlay();
+
+        // 步骤1: 介绍Create Story页面
+        await showTutorialStepWithOverlay(
+            '.card',
+            '创建故事演示',
+            '现在我们将演示如何创建一个完整的故事。我将填写故事信息、上传封面图片并设置起始场景。',
+            3000
+        );
+
+        // 步骤2: 填写故事名称
+        await showTutorialStep(
+            '#name',
+            '故事名称',
+            '设置故事名称为："Alice\'s Adventures in Wonderland"',
+            2000
+        );
+        await simulateInput(document.getElementById('name'), "Alice's Adventures in Wonderland");
+
+        // 步骤3: 填写故事介绍
+        await showTutorialStep(
+            '#introduction',
+            '故事介绍',
+            '填写故事的详细介绍',
+            2000
+        );
+        const introduction = "Alice Wonderland Adventures tells the little girl Alice to catch a Chuaizhuo pocket watch speak the white rabbit, fell into a rabbit hole, which fell into the magical underground world.";
+        await simulateInput(document.getElementById('introduction'), introduction);
+
+        // 步骤4: 上传封面图片
+        await showTutorialStep(
+            '#coverFile',
+            '封面图片',
+            '上传故事封面图片：5.png',
+            2000
+        );
+        await simulateImageUpload('5.png');
+
+        // 步骤5: 选择起始场景
+        await showTutorialStep(
+            '#firstSceneSelect',
+            '起始场景',
+            '选择"party"作为故事的起始场景',
+            2000
+        );
+        await simulateSelectOption(document.getElementById('firstSceneSelect'), 'party');
+
+        // 步骤6: 保存故事
+        const saveBtn = document.querySelector('button[type="submit"]');
+        await showTutorialStep(
+            saveBtn,
+            '保存故事',
+            '点击"Save Story Details"保存故事信息',
+            2000
+        );
+
+        await simulateStorySave(saveBtn, '正在保存故事...');
+
+        // 等待保存完成
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // 演示完成
+        await showTutorialStepWithOverlay(
+            '.card',
+            '完整演示结束',
+            '🎉 恭喜！您已经完成了完整的交互式故事创建流程！\n\n从场景创建 → 场景连接 → 故事创建，您现在已经掌握了所有核心功能。',
+            4000
+        );
+
+        await showTutorialStepWithOverlay(
+            '.card',
+            '演示总结',
+            '✅ 创建了4个场景\n✅ 设置了场景间的连接\n✅ 创建了完整的故事\n\n现在您可以开始创建自己的交互式故事了！',
+            4000
+        );
+
+        removeTutorialOverlay();
+
+        // 询问用户是否要查看创建的故事
+        const viewStory = confirm('演示完成！是否要查看刚刚创建的故事？');
+        if (viewStory) {
+            // 跳转到My Stories页面，带上演示标记以便显示刚创建的故事
+            window.location.href = '/my-stories?from=demo';
+        } else {
+            alert('感谢您完成新手教程！您现在可以开始创建自己的交互式故事了。');
+        }
+    }
+    // 模拟输入文本
+    function simulateInput(element, text) {
+        return new Promise((resolve) => {
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            element.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            // 显示操作提示
+            const tooltip = createOperationTooltip(`正在输入: ${text.substring(0, 30)}...`);
+
+            setTimeout(() => {
+                // 模拟逐字输入
+                let currentText = '';
+                const inputInterval = setInterval(() => {
+                    if (currentText.length < text.length) {
+                        currentText += text[currentText.length];
+                        element.value = currentText;
+                        element.dispatchEvent(new Event('input', { bubbles: true }));
+                    } else {
+                        clearInterval(inputInterval);
+
+                        // 恢复样式
+                        element.style.boxShadow = '';
+                        element.style.backgroundColor = '';
+
+                        // 移除提示
+                        if (tooltip && tooltip.parentNode) {
+                            tooltip.remove();
+                        }
+
+                        resolve();
+                    }
+                }, 50); // 每50ms输入一个字符
+            }, 500);
+        });
+    }
+
+    // 模拟图片上传
+    function simulateImageUpload(imageName) {
+        return new Promise((resolve) => {
+            const fileInput = document.getElementById('coverFile');
+
+            // 高亮文件输入框
+            fileInput.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            fileInput.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            // 显示操作提示
+            const tooltip = createOperationTooltip(`正在上传封面图片：${imageName}`);
+
+            setTimeout(() => {
+                // 模拟图片上传成功，设置图片URL
+                const imageUrl = `/images/landscape/${imageName}`;
+                document.getElementById('cover').value = imageUrl;
+
+                // 显示预览
+                const preview = document.getElementById('coverPreview');
+                preview.src = imageUrl;
+                document.getElementById('cover-preview-container').style.display = 'block';
+
+                // 恢复样式
+                fileInput.style.boxShadow = '';
+                fileInput.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 2000);
+        });
+    }
+
+    // 模拟选择下拉框选项
+    function simulateSelectOption(selectElement, optionText) {
+        return new Promise((resolve) => {
+            // 高亮元素
+            selectElement.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            selectElement.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            // 显示操作提示
+            const tooltip = createOperationTooltip(`正在选择${optionText}场景...`);
+
+            setTimeout(() => {
+                // 查找并选择对应的选项
+                const options = selectElement.querySelectorAll('option');
+                for (let option of options) {
+                    if (option.textContent.toLowerCase().includes(optionText.toLowerCase())) {
+                        selectElement.value = option.value;
+                        selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+                        break;
+                    }
+                }
+
+                // 恢复样式
+                selectElement.style.boxShadow = '';
+                selectElement.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 修改后的模拟故事保存函数 - 实际执行保存操作
+    function simulateStorySave(element, message) {
+        return new Promise(async (resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            element.style.backgroundColor = 'rgba(147, 112, 219, 0.2)';
+
+            setTimeout(async () => {
+                try {
+                    // 收集故事数据
+                    const storyData = {
+                        name: document.getElementById('name').value,
+                        introduction: document.getElementById('introduction').value,
+                        cover: document.getElementById('cover').value,
+                        max: parseInt(document.getElementById('max').value, 10),
+                        firstSceneId: document.getElementById('firstSceneSelect').value ?
+                            parseInt(document.getElementById('firstSceneSelect').value, 10) : null
+                    };
+
+                    console.log('正在保存故事数据:', storyData);
+
+                    // 实际提交故事数据
+                    const isUpdate = !!currentStoryId;
+                    const url = isUpdate ? `/api/stories/${currentStoryId}` : '/api/stories/create';
+                    const method = isUpdate ? 'PUT' : 'POST';
+
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(storyData)
+                    });
+
+                    const result = await response.json();
+                    console.log('故事保存结果:', result);
+
+                    if (result && result.code === '200') {
+                        console.log('故事保存成功！');
+
+                        // 如果是新创建的故事，更新当前故事ID
+                        if (!isUpdate && result.data) {
+                            currentStoryId = result.data;
+                            document.getElementById('storyId').value = result.data;
+                        }
+
+                        // 显示成功消息
+                        showMessage('Story saved successfully!', true);
+                    } else {
+                        console.error('故事保存失败:', result ? result.msg : 'Unknown error');
+                        showMessage('Failed to save story: ' + (result ? result.msg : 'Unknown error'), false);
+                    }
+
+                } catch (error) {
+                    console.error('保存故事时发生错误:', error);
+                    showMessage('An error occurred while saving the story.', false);
+                }
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 2000);
+        });
+    }
+    // 创建操作提示框
+    function createOperationTooltip(message) {
+        const tooltip = document.createElement('div');
+        tooltip.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(147, 112, 219, 0.75);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 10002;
+            animation: fadeIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(147, 112, 219, 0.4);
+            border: 1px solid #9370DB;
+            backdrop-filter: blur(10px);
+        `;
+        tooltip.textContent = message;
+        document.body.appendChild(tooltip);
+        return tooltip;
+    }
+
+    // 带有蒙版效果的教程步骤显示
+    function showTutorialStepWithOverlay(targetElement, title, description, duration) {
+        return new Promise((resolve) => {
+            // 创建中央提示框（在现有蒙版上显示）
+            const centerTooltip = document.createElement('div');
+            centerTooltip.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(147, 112, 219, 0.85);
+                color: white;
+                padding: 25px 35px;
+                border-radius: 12px;
+                font-weight: bold;
+                z-index: 10001;
+                text-align: center;
+                animation: fadeIn 0.3s ease;
+                box-shadow: 0 8px 32px rgba(147, 112, 219, 0.4);
+                border: 2px solid #9370DB;
+                min-width: 300px;
+                backdrop-filter: blur(10px);
+            `;
+
+            centerTooltip.innerHTML = `
+                <h5 style="color: white; margin-bottom: 15px; font-size: 1.3rem;">${title}</h5>
+                <p style="margin: 0; line-height: 1.6; color: #F8F8FF; font-size: 1.1rem;">${description}</p>
+            `;
+
+            document.body.appendChild(centerTooltip);
+
+            // 自动移除提示框
+            setTimeout(() => {
+                if (centerTooltip && centerTooltip.parentNode) {
+                    centerTooltip.remove();
+                }
+
+                resolve();
+            }, duration);
+        });
+    }
+
+    // 创建教程遮罩层
+    function createTutorialOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'tutorial-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            pointer-events: none;
+            backdrop-filter: blur(2px);
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    // 显示教程步骤
+    function showTutorialStep(targetElement, title, description, duration) {
+        return new Promise((resolve) => {
+            const target = typeof targetElement === 'string'
+                ? document.getElementById(targetElement) || document.querySelector(targetElement)
+                : targetElement;
+
+            if (!target) {
+                resolve();
+                return;
+            }
+
+            // 滚动到目标元素
+            target.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+
+            // 高亮目标元素
+            const originalStyle = {
+                position: target.style.position,
+                zIndex: target.style.zIndex,
+                boxShadow: target.style.boxShadow,
+                borderRadius: target.style.borderRadius,
+                backgroundColor: target.style.backgroundColor
+            };
+
+            target.style.position = 'relative';
+            target.style.zIndex = '10000';
+            target.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            target.style.borderRadius = '8px';
+            target.style.backgroundColor = 'rgba(147, 112, 219, 0.1)';
+
+            // 创建提示框（紫色主题）
+            const tooltip = document.createElement('div');
+            tooltip.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(147, 112, 219, 0.85);
+                color: white;
+                padding: 25px;
+                border-radius: 12px;
+                box-shadow: 0 8px 32px rgba(147, 112, 219, 0.4);
+                max-width: 400px;
+                z-index: 10001;
+                text-align: center;
+                animation: fadeIn 0.3s ease;
+                border: 2px solid #9370DB;
+                backdrop-filter: blur(10px);
+            `;
+
+            tooltip.innerHTML = `
+                <h5 style="color: white; margin-bottom: 15px;">${title}</h5>
+                <p style="margin-bottom: 20px; line-height: 1.6; color: #F8F8FF;">${description}</p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button onclick="nextTutorialStep()" class="btn btn-light">继续 →</button>
+                    <button onclick="skipTutorial()" class="btn btn-outline-light">跳过教程</button>
+                </div>
+            `;
+
+            document.body.appendChild(tooltip);
+
+            window.nextTutorialStep = () => {
+                // 恢复原始样式
+                Object.keys(originalStyle).forEach(key => {
+                    target.style[key] = originalStyle[key];
+                });
+                tooltip.remove();
+                resolve();
+            };
+
+            window.skipTutorial = () => {
+                // 恢复原始样式
+                Object.keys(originalStyle).forEach(key => {
+                    target.style[key] = originalStyle[key];
+                });
+                tooltip.remove();
+                removeTutorialOverlay();
+                alert('教程已跳过！');
+            };
+
+            // 自动继续
+            if (duration) {
+                setTimeout(() => {
+                    if (document.body.contains(tooltip)) {
+                        window.nextTutorialStep();
+                    }
+                }, duration);
+            }
+        });
+    }
+
+    // 移除教程遮罩层
+    function removeTutorialOverlay() {
+        const overlay = document.getElementById('tutorial-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+
+    // 原有的功能函数保持不变
     // auto upload when selecting file
     document.getElementById('coverFile').addEventListener('change', async function() {
         const input = this;
@@ -106,6 +587,14 @@
     // Handle Story Form (Create/Update)
     document.getElementById('story-form').addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        // 检查是否是演示模式
+        const urlParams = new URLSearchParams(window.location.search);
+        const tutorialMode = urlParams.get('tutorial');
+        if (tutorialMode === 'auto') {
+            return; // 演示模式下不执行实际提交
+        }
+
         const storyData = {
             name: document.getElementById('name').value,
             introduction: document.getElementById('introduction').value,

@@ -96,7 +96,376 @@
     document.addEventListener('DOMContentLoaded', function () {
         fetchProfile();
         fetchMyStories();
+
+        // 检查是否是自动演示模式
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('tutorial') === 'auto') {
+            // 延迟执行演示，确保页面完全加载
+            setTimeout(() => {
+                executeProfileDemo();
+            }, 1500);
+        }
     });
+
+    // 在Profile页面执行的自动演示
+    async function executeProfileDemo() {
+        // 等待页面加载完成
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // 创建遮罩层
+        createTutorialOverlay();
+
+        // 步骤1: 介绍属性区域
+        await showTutorialStep(
+            '#attributes-form',
+            '角色属性设置',
+            '这里是角色属性设置区域。我将演示如何重置和设置属性点。',
+            3000
+        );
+
+        // 步骤2: 高亮Reset按钮并自动点击
+        const resetBtn = document.getElementById('reset-attributes-btn');
+        if (resetBtn) {
+            await showTutorialStep(
+                resetBtn,
+                '重置属性',
+                '首先点击"Reset Attributes"按钮重置所有属性点。',
+                2000
+            );
+
+            // 自动点击重置按钮（跳过确认对话框）
+            await simulateResetClick(resetBtn, '正在重置属性...');
+
+            // 等待重置完成并刷新数据
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await fetchProfile(); // 重新加载数据
+        }
+
+        // 步骤3: 演示设置属性值
+        await showTutorialStep(
+            '#attributes-form',
+            '设置属性值',
+            '现在我将把所有属性都设置为2。',
+            2000
+        );
+
+        // 自动设置所有属性为2
+        const attributes = ['power', 'agile', 'perception', 'intelligence', 'charm'];
+        for (let attr of attributes) {
+            const input = document.getElementById(attr);
+            if (input) {
+                await showTutorialStep(
+                    input,
+                    `设置${attr.charAt(0).toUpperCase() + attr.slice(1)}`,
+                    `将${attr}属性设置为2`,
+                    1500
+                );
+
+                // 自动输入数值
+                await simulateInput(input, '2');
+            }
+        }
+
+        // 步骤4: 保存属性设置
+        const updateBtn = document.querySelector('#attributes-form button[type="submit"]');
+        if (updateBtn) {
+            await showTutorialStep(
+                updateBtn,
+                '保存属性设置',
+                '最后点击"Update Attributes"保存设置。',
+                2000
+            );
+
+            // 自动点击保存按钮
+            await simulateSubmitClick(updateBtn, '正在保存属性设置...');
+
+            // 等待保存完成
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        // 演示完成
+        await showTutorialStep(
+            '#profile-info',
+            '属性设置完成',
+            '属性设置演示完成！您已经学会了如何管理角色属性。',
+            3000
+        );
+
+        // 询问是否继续下一步演示
+        const continueDemo = confirm('属性设置演示完成！是否继续场景编辑演示？');
+
+        if (continueDemo) {
+            // 跳转到Scene Editor进行下一步演示
+            removeTutorialOverlay();
+            window.location.href = '/scene-editor?tutorial=auto&step=1';
+        } else {
+            removeTutorialOverlay();
+            alert('演示完成！您可以继续探索其他功能。');
+        }
+    }
+
+    // 模拟重置按钮点击（跳过确认对话框）
+    function simulateResetClick(element, message) {
+        return new Promise(async (resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(255, 215, 0, 0.8)';
+            element.style.backgroundColor = 'rgba(255, 215, 0, 0.2)';
+
+            setTimeout(async () => {
+                try {
+                    // 直接调用API重置属性，跳过确认对话框
+                    const response = await fetch('/api/accounts/profile/reset-attributes', { method: 'POST' });
+                    const result = await response.json();
+
+                    if (result.code === '200') {
+                        console.log('属性重置成功');
+                    } else {
+                        console.error('属性重置失败:', result.msg);
+                    }
+                } catch (error) {
+                    console.error('重置属性时发生错误:', error);
+                }
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 模拟提交按钮点击
+    function simulateSubmitClick(element, message) {
+        return new Promise(async (resolve) => {
+            // 显示操作提示
+            const tooltip = createOperationTooltip(message);
+
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(255, 215, 0, 0.8)';
+            element.style.backgroundColor = 'rgba(255, 215, 0, 0.2)';
+
+            setTimeout(async () => {
+                try {
+                    // 收集表单数据并提交
+                    const updatedData = {
+                        power: parseInt(document.getElementById('power').value) || 0,
+                        agile: parseInt(document.getElementById('agile').value) || 0,
+                        perception: parseInt(document.getElementById('perception').value) || 0,
+                        intelligence: parseInt(document.getElementById('intelligence').value) || 0,
+                        charm: parseInt(document.getElementById('charm').value) || 0,
+                    };
+
+                    const response = await fetch('/api/accounts/profile/attributes', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updatedData)
+                    });
+                    const result = await response.json();
+
+                    if (result.code === '200') {
+                        console.log('属性更新成功');
+                        await fetchProfile(); // 刷新数据
+                    } else {
+                        console.error('属性更新失败:', result.msg);
+                    }
+                } catch (error) {
+                    console.error('更新属性时发生错误:', error);
+                }
+
+                // 恢复样式
+                element.style.boxShadow = '';
+                element.style.backgroundColor = '';
+
+                // 移除提示
+                if (tooltip && tooltip.parentNode) {
+                    tooltip.remove();
+                }
+
+                resolve();
+            }, 1500);
+        });
+    }
+
+    // 模拟输入操作
+    function simulateInput(element, value) {
+        return new Promise((resolve) => {
+            // 高亮元素
+            element.style.boxShadow = '0 0 20px 5px rgba(255, 215, 0, 0.8)';
+            element.style.backgroundColor = 'rgba(255, 215, 0, 0.2)';
+
+            // 清空并逐字输入
+            element.value = '';
+            element.focus();
+
+            let i = 0;
+            const inputInterval = setInterval(() => {
+                if (i < value.length) {
+                    element.value += value[i];
+                    // 触发input事件
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                    i++;
+                } else {
+                    clearInterval(inputInterval);
+
+                    // 恢复样式
+                    element.style.boxShadow = '';
+                    element.style.backgroundColor = '';
+
+                    resolve();
+                }
+            }, 300);
+        });
+    }
+
+    // 创建教程遮罩层
+    function createTutorialOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'tutorial-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            pointer-events: none;
+            backdrop-filter: blur(2px);
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    // 显示教程步骤
+    function showTutorialStep(targetElement, title, description, duration) {
+        return new Promise((resolve) => {
+            const target = typeof targetElement === 'string'
+                ? document.getElementById(targetElement) || document.querySelector(targetElement)
+                : targetElement;
+
+            if (!target) {
+                resolve();
+                return;
+            }
+
+            // 滚动到目标元素
+            target.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+
+            // 高亮目标元素
+            const originalStyle = {
+                position: target.style.position,
+                zIndex: target.style.zIndex,
+                boxShadow: target.style.boxShadow,
+                borderRadius: target.style.borderRadius,
+                backgroundColor: target.style.backgroundColor
+            };
+
+            target.style.position = 'relative';
+            target.style.zIndex = '10000';
+            target.style.boxShadow = '0 0 20px 5px rgba(147, 112, 219, 0.8)';
+            target.style.borderRadius = '8px';
+            target.style.backgroundColor = 'rgba(147, 112, 219, 0.1)';
+
+            // 创建提示框（紫色主题）
+            const tooltip = document.createElement('div');
+            tooltip.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(147, 112, 219, 0.75);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(147, 112, 219, 0.4);
+            max-width: 400px;
+            z-index: 10001;
+            text-align: center;
+            animation: fadeIn 0.3s ease;
+            border: 2px solid #9370DB;
+        `;
+
+            tooltip.innerHTML = `
+            <h5 style="color: white; margin-bottom: 15px;">${title}</h5>
+            <p style="margin-bottom: 20px; line-height: 1.6; color: #F8F8FF;">${description}</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button onclick="nextTutorialStep()" class="btn btn-light">继续 →</button>
+                <button onclick="skipTutorial()" class="btn btn-outline-light">跳过教程</button>
+            </div>
+        `;
+
+            document.body.appendChild(tooltip);
+
+            window.nextTutorialStep = () => {
+                // 恢复原始样式
+                Object.keys(originalStyle).forEach(key => {
+                    target.style[key] = originalStyle[key];
+                });
+                tooltip.remove();
+                resolve();
+            };
+
+            window.skipTutorial = () => {
+                // 恢复原始样式
+                Object.keys(originalStyle).forEach(key => {
+                    target.style[key] = originalStyle[key];
+                });
+                tooltip.remove();
+                removeTutorialOverlay();
+                alert('教程已跳过！');
+            };
+
+            // 自动继续
+            if (duration) {
+                setTimeout(() => {
+                    if (document.body.contains(tooltip)) {
+                        window.nextTutorialStep();
+                    }
+                }, duration);
+            }
+        });
+    }
+
+    // 创建操作提示框
+    function createOperationTooltip(message) {
+        const tooltip = document.createElement('div');
+        tooltip.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(147, 112, 219, 0.65);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: bold;
+        z-index: 10002;
+        animation: fadeIn 0.3s ease;
+        box-shadow: 0 4px 12px rgba(147, 112, 219, 0.4);
+        border: 1px solid #9370DB;
+    `;
+        tooltip.textContent = message;
+        document.body.appendChild(tooltip);
+        return tooltip;
+    }
+    // 移除教程遮罩层
+    function removeTutorialOverlay() {
+        const overlay = document.getElementById('tutorial-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+
 
     async function fetchProfile() {
         try {
