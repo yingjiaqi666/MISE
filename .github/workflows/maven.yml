@@ -13,29 +13,27 @@ env:
 
 jobs:
   # ==========================================
-  # 阶段 1: 联网
+  # 构建 + 部署（合并为一个 job，避免网络问题）
   # ==========================================
-  network_setup:
+  build-and-deploy:
     runs-on: self-hosted
     steps:
+    # 1. 先联网
     - name: 🔌 连接校园网
       run: |
         echo "=========================================="
         echo "🔌 Pipeline 开始 - 正在连接校园网"
         echo "=========================================="
         sudo /usr/local/bin/campus-network/login.sh || true
-        sleep 3
-        echo "✅ 网络已连接，开始任务"
+        sleep 5
+        echo "✅ 网络已连接"
+        # 测试网络连通性
+        curl -s --max-time 10 https://github.com > /dev/null && echo "✅ GitHub 可访问" || echo "⚠️ GitHub 访问测试失败"
 
-  # ==========================================
-  # 阶段 2: 构建
-  # ==========================================
-  build:
-    needs: network_setup
-    runs-on: self-hosted
-    steps:
+    # 2. 再拉取代码
     - uses: actions/checkout@v4
     
+    # 3. 设置 JDK
     - name: ☕ Set up JDK 17
       uses: actions/setup-java@v4
       with:
@@ -43,34 +41,17 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
+    # 4. 构建
     - name: 📦 Build with Maven
       run: mvn -B clean package -DskipTests --file pom.xml
     
-    - name: 📁 Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-jar
-        path: target/*.jar
-        retention-days: 1
-
-  # ==========================================
-  # 阶段 3: 部署
-  # ==========================================
-  deploy:
-    needs: build
-    runs-on: self-hosted
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-    - name: 📥 Download artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: app-jar
-        path: ./target
-    
+    # 5. 部署（仅 main 分支 push）
     - name: 📁 Create deploy directory
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: mkdir -p ${{ env.DEPLOY_PATH }}
     
     - name: 🛑 Stop old application
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         PID=$(pgrep -f "${{ env.APP_NAME }}" || true)
         if [ -n "$PID" ]; then
@@ -80,10 +61,12 @@ jobs:
         fi
     
     - name: 🚀 Deploy new application
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         cp target/*.jar ${{ env.DEPLOY_PATH }}/${{ env.APP_NAME }}.jar
     
     - name: ▶️ Start application
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         cd ${{ env.DEPLOY_PATH }}
         nohup java -jar ${{ env.APP_NAME }}.jar \
@@ -92,6 +75,7 @@ jobs:
         echo "Application started on port ${{ env.APP_PORT }}"
     
     - name: 🔍 Health check
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         sleep 15
         if pgrep -f "${{ env.APP_NAME }}" > /dev/null; then
@@ -102,22 +86,27 @@ jobs:
           exit 1
         fi
 
-  # ==========================================
-  # 阶段 4: 断网（始终执行）
-  # ==========================================
-  network_cleanup:
-    needs: [build, deploy]
-    runs-on: self-hosted
-    if: always()  # 无论前面成功还是失败都执行
-    steps:
+    # 6. 最后断网
     - name: 🔌 断开校园网
+      if: always()
       run: |
-        echo ""
         echo "=========================================="
         echo "🔌 Pipeline 结束 - 准备断开网络"
         echo "=========================================="
-        echo "⏳ 等待 30 秒确保所有下载完成..."
-        sleep 30
+        echo "⏳ 等待 10 秒确保所有操作完成..."
+        sleep 10
         sudo /usr/local/bin/campus-network/logout.sh || true
         echo "✅ 网络已断开，节省校园网费用"
         echo "=========================================="
+```
+
+## 主要改动
+
+1. **合并为一个 job** — 避免 job 之间的网络状态丢失
+2. **联网放在 checkout 之前** — 确保拉代码时网络已连接
+3. **添加网络测试** — 联网后测试 GitHub 是否可访问
+4. **断网用 `if: always()`** — 无论成功失败都断网
+
+这样流程是：
+```
+联网 → 拉代码 → 构建 → 部署 → 断网
