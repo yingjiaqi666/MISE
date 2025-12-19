@@ -12,44 +12,65 @@ env:
   DEPLOY_PATH: /home/ubuntu/app
 
 jobs:
+  # ==========================================
+  # 阶段 1: 联网
+  # ==========================================
+  network_setup:
+    runs-on: self-hosted
+    steps:
+    - name: 🔌 连接校园网
+      run: |
+        echo "=========================================="
+        echo "🔌 Pipeline 开始 - 正在连接校园网"
+        echo "=========================================="
+        sudo /usr/local/bin/campus-network/login.sh || true
+        sleep 3
+        echo "✅ 网络已连接，开始任务"
+
+  # ==========================================
+  # 阶段 2: 构建
+  # ==========================================
   build:
+    needs: network_setup
     runs-on: self-hosted
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up JDK 17
+    - name: ☕ Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
         cache: maven
     
-    - name: Build with Maven
+    - name: 📦 Build with Maven
       run: mvn -B clean package -DskipTests --file pom.xml
     
-    # 删掉 dependency graph 步骤，不需要它
+    - name: 📁 Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-jar
+        path: target/*.jar
+        retention-days: 1
 
+  # ==========================================
+  # 阶段 3: 部署
+  # ==========================================
   deploy:
     needs: build
     runs-on: self-hosted
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
+    - name: 📥 Download artifact
+      uses: actions/download-artifact@v4
       with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
+        name: app-jar
+        path: ./target
     
-    - name: Build with Maven
-      run: mvn -B clean package -DskipTests --file pom.xml
-    
-    - name: Create deploy directory
+    - name: 📁 Create deploy directory
       run: mkdir -p ${{ env.DEPLOY_PATH }}
     
-    - name: Stop old application
+    - name: 🛑 Stop old application
       run: |
         PID=$(pgrep -f "${{ env.APP_NAME }}" || true)
         if [ -n "$PID" ]; then
@@ -58,26 +79,45 @@ jobs:
           sleep 5
         fi
     
-    - name: Deploy new application
+    - name: 🚀 Deploy new application
       run: |
         cp target/*.jar ${{ env.DEPLOY_PATH }}/${{ env.APP_NAME }}.jar
     
-    - name: Start application
+    - name: ▶️ Start application
       run: |
         cd ${{ env.DEPLOY_PATH }}
         nohup java -jar ${{ env.APP_NAME }}.jar \
           --server.port=${{ env.APP_PORT }} \
           > app.log 2>&1 &
         echo "Application started on port ${{ env.APP_PORT }}"
-        sleep 10
     
-    - name: Health check
+    - name: 🔍 Health check
       run: |
         sleep 15
         if pgrep -f "${{ env.APP_NAME }}" > /dev/null; then
-          echo "Application is running!"
+          echo "✅ Application is running!"
         else
-          echo "Application failed to start!"
+          echo "❌ Application failed to start!"
           cat ${{ env.DEPLOY_PATH }}/app.log
           exit 1
         fi
+
+  # ==========================================
+  # 阶段 4: 断网（始终执行）
+  # ==========================================
+  network_cleanup:
+    needs: [build, deploy]
+    runs-on: self-hosted
+    if: always()  # 无论前面成功还是失败都执行
+    steps:
+    - name: 🔌 断开校园网
+      run: |
+        echo ""
+        echo "=========================================="
+        echo "🔌 Pipeline 结束 - 准备断开网络"
+        echo "=========================================="
+        echo "⏳ 等待 30 秒确保所有下载完成..."
+        sleep 30
+        sudo /usr/local/bin/campus-network/logout.sh || true
+        echo "✅ 网络已断开，节省校园网费用"
+        echo "=========================================="
